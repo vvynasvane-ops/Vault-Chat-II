@@ -11,7 +11,9 @@
 // Signal types carried through the same mailbox (all still relay-and-delete):
 //   TEXT            - Section 3, core messaging
 //   KEY_EXCHANGE    - initial/rotated public key handoff
-//   MEDIA           - Section 7, encrypted file/image/video/audio bytes
+//   IMAGE/VIDEO/    - Section 7, encrypted file/image/video/audio bytes
+//   AUDIO/FILE        (type is the concrete media kind, matching the RTDB
+//                      rules' validated type list — no wrapper "MEDIA" type)
 //   DELIVERY_ACK    - Section 3, message status: Sent -> Delivered
 //   READ_ACK        - Section 3, message status: Delivered -> Read
 //   EDIT            - Section 5, edit synced to the recipient's copy
@@ -163,8 +165,9 @@ export async function sendMediaFile(myUid, recipientUid, theirPublicKeyBase64, f
     await mailbox(recipientUid, messageId, {
       messageId,
       senderId: myUid,
-      type: "MEDIA",
-      mediaType,
+      // `type` matches the RTDB rules' validated set directly
+      // (IMAGE|VIDEO|FILE|AUDIO) — no separate "MEDIA" wrapper type.
+      type: mediaType,
       fileName: file.name,
       mimeType: file.type || "application/octet-stream",
       fileSize: file.size,
@@ -240,7 +243,7 @@ export async function sendReadAck(recipientUid, myUid, messageIds) {
 // server copy, and invokes the matching handler.
 //
 // handlers:
-//   resolveSender(uid)              -> profile (used for TEXT/MEDIA/EDIT)
+//   resolveSender(uid)              -> profile (used for TEXT/media/EDIT)
 //   onText(localMessage)            -> new decrypted text message saved
 //   onMedia(localMessage)           -> new decrypted media message saved
 //   onKeyExchange(msg)              -> a contact's public key arrived
@@ -307,7 +310,7 @@ export function startInbox(myUid, handlers) {
         };
         await idb.put("messages", localMessage);
         handlers.onText && handlers.onText(localMessage);
-      } else if (msg.type === "MEDIA") {
+      } else if (["IMAGE", "VIDEO", "AUDIO", "FILE"].includes(msg.type)) {
         const senderProfile = await handlers.resolveSender(msg.senderId);
         const aesKey = await deriveSharedKey(senderProfile.publicKeyBase64);
         const encryptedBytes = fromBase64(msg.encryptedMedia);
@@ -322,7 +325,7 @@ export function startInbox(myUid, handlers) {
           senderId: msg.senderId,
           receiverId: myUid,
           content: msg.fileName,
-          messageType: msg.mediaType,
+          messageType: msg.type,
           mimeType: msg.mimeType,
           fileName: msg.fileName,
           fileSize: msg.fileSize,
