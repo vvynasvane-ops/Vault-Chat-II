@@ -1,5 +1,31 @@
 # VaultChatt II — Web Client Setup & Sync Guide
 
+## Feature-parity update (this revision)
+
+The web client now implements the full feature set from `Feature_Overview.md`,
+on top of the same Firebase project/config — nothing in `firebase-config.js`
+changed. Additions: message status ticks + read receipts, date separators,
+edit & delete-for-everyone/delete-for-me (long-press or right-click a
+bubble), pin/unpin + pinned bar, encrypted media/file sharing (multi-select,
+thumbnails, media gallery, share-out via Web Share API), per-chat wallpaper
++ home background (stored in IndexedDB, fail-safe if the file goes
+missing), dark/light theme + font family/weight/size/color controls
+(app-wide via CSS variables, ID codes and fingerprints stay monospace),
+profile pictures (cropped/compressed client-side, stored as base64 on the
+user doc — no new Storage bucket needed), contact search/favourite/mute,
+and live contact profile sync. `idb.js` bumped `DB_VERSION` to 2 with a
+purely additive migration (new object stores only — nothing existing is
+touched, so no one's local history is lost on update).
+
+Two Android-specific items were intentionally left as-is for the web
+client: the GIF/sticker tray is a mobile-keyboard feature with no browser
+equivalent, and full OS "share into the app" for files needs a service
+worker + hosting change beyond this pass (sharing *out* of the app already
+works via the Web Share API). Ask if you want either wired in next.
+
+---
+
+
 This web app is **not a separate product** — it's a second client for the exact same
 Firebase project (`vault-chatt-ii`) your Android app already uses. Same users, same
 ID codes, same contacts, same message relay. No new backend, no schema changes,

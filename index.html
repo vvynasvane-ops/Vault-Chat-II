@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VaultChatt II — Access Terminal</title>
+
+<link rel="icon" type="image/x-icon" href="favicon.ico" />
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+<link rel="manifest" href="site.webmanifest" />
+<meta name="theme-color" content="#080c14" />
+
+<link rel="stylesheet" href="style.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body class="auth-body">
+  <div class="hex-field" aria-hidden="true"></div>
+  <div class="scanline" aria-hidden="true"></div>
+
+  <main class="auth-card">
+    <div class="brand">
+      <span class="brand-glyph">◈</span>
+      <h1>VAULT<span class="accent">CHATT</span> II</h1>
+      <p class="brand-sub">Encrypted relay · web terminal</p>
+    </div>
+
+    <form id="auth-form" class="auth-form" autocomplete="on">
+      <h2 id="form-title">Sign in</h2>
+
+      <div class="field hidden" id="field-username">
+        <label for="input-username">Username</label>
+        <input id="input-username" type="text" minlength="3" maxlength="30" placeholder="e.g. veus_alpha" />
+      </div>
+
+      <div class="field hidden" id="field-display-name">
+        <label for="input-display-name">Display name</label>
+        <input id="input-display-name" type="text" placeholder="How contacts see you" />
+      </div>
+
+      <div class="field">
+        <label for="input-email">Email</label>
+        <input id="input-email" type="email" required autocomplete="email" placeholder="you@example.com" />
+      </div>
+
+      <div class="field">
+        <label for="input-password">Password</label>
+        <input id="input-password" type="password" required autocomplete="current-password" placeholder="••••••••" />
+      </div>
+
+      <p id="form-error" class="form-error hidden"></p>
+
+      <button id="btn-submit" type="submit" class="btn-primary">Sign in</button>
+      <button id="toggle-mode" type="button" class="btn-link">Don't have an account? Sign up</button>
+    </form>
+
+    <p class="fine-print">
+      Same Firestore project as the Android app — your ID code, contacts, and messages sync live across both.
+    </p>
+  </main>
+<style>
+/* VaultChatt II — web terminal
+   Palette: deep space + signal cyan, matching the Android app's identity. */
+
+:root {
+  --bg-void: #080c14;
+  --bg-panel: #0d131f;
+  --bg-panel-raised: #111a2b;
+  --cyan: #00e5ff;
+  --cyan-dim: #0891a8;
+  --cyan-glow: rgba(0, 229, 255, 0.35);
+  --text-primary: #e8f6fa;
+  --text-dim: #7b93a8;
+  --danger: #ff4d6d;
+  --online: #22ffb0;
+  --offline: #3a4a5c;
+  --border: rgba(0, 229, 255, 0.16);
+  --radius: 10px;
+  --font-display: "Orbitron", sans-serif;
+  --font-body: "Rajdhani", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg-void);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Ambient background texture ─────────────────────────────────── */
+
+.hex-field {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(30deg, transparent 48%, var(--border) 49%, var(--border) 51%, transparent 52%),
+    linear-gradient(150deg, transparent 48%, var(--border) 49%, var(--border) 51%, transparent 52%);
+  background-size: 64px 110px;
+  opacity: 0.35;
+  mask-image: radial-gradient(ellipse at 50% 0%, black 0%, transparent 75%);
+}
+
+.scanline {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 229, 255, 0.03) 0px,
+    rgba(0, 229, 255, 0.03) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+/* ── Auth page ──────────────────────────────────────────────────── */
+
+.auth-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.auth-card {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 420px;
+  background: linear-gradient(180deg, var(--bg-panel-raised), var(--bg-panel));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 36px 32px 28px;
+  box-shadow: 0 0 60px rgba(0, 229, 255, 0.08), 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+.brand { text-align: center; margin-bottom: 28px; }
+
+.brand-glyph {
+  display: inline-block;
+  font-size: 28px;
+  color: var(--cyan);
+  text-shadow: 0 0 16px var(--cyan-glow);
+  margin-bottom: 6px;
+}
+
+.brand h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: 2px;
+  margin: 4px 0 6px;
+  color: var(--text-primary);
+}
+
+.brand h1 .accent { color: var(--cyan); }
+
+.brand-sub {
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.auth-form h2 {
+  font-family: var(--font-display);
+  font-size: 16px;
+  letter-spacing: 1px;
+  color: var(--cyan);
+  margin: 0 0 18px;
+  text-transform: uppercase;
+}
+
+.field { margin-bottom: 16px; }
+.field.hidden { display: none; }
+
+.field label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  letter-spacing: 0.5px;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"] {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 11px 12px;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px var(--cyan-glow);
+}
+
+.btn-primary {
+  width: 100%;
+  background: linear-gradient(135deg, var(--cyan), var(--cyan-dim));
+  color: #001217;
+  border: none;
+  border-radius: 6px;
+  padding: 12px;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  margin-top: 6px;
+  transition: filter 0.15s, transform 0.1s;
+}
+.btn-primary:hover { filter: brightness(1.1); }
+.btn-primary:active { transform: scale(0.98); }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.btn-link {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--cyan-dim);
+  font-size: 13px;
+  padding: 12px 0 0;
+  cursor: pointer;
+  text-align: center;
+}
+.btn-link:hover { color: var(--cyan); }
+.btn-link.danger { color: var(--danger); text-align: right; padding: 0; }
+
+.form-error {
+  color: var(--danger);
+  font-size: 13px;
+  margin: 4px 0 10px;
+}
+.form-error.hidden, .hidden { display: none !important; }
+
+.fine-print {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 22px;
+  line-height: 1.5;
+}
+
+/* ── App shell ──────────────────────────────────────────────────── */
+
+.app-body { height: 100vh; overflow: hidden; }
+
+.app-shell {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  height: 100vh;
+}
+
+.sidebar {
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+  overflow-y: auto;
+}
+
+.me-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.avatar-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--offline);
+  box-shadow: 0 0 8px var(--offline);
+  flex-shrink: 0;
+}
+.avatar-dot[data-status="online"] {
+  background: var(--online);
+  box-shadow: 0 0 8px var(--online);
+}
+
+.me-meta { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.me-name { font-weight: 600; font-size: 15px; }
+.me-idcode {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--cyan-dim);
+}
+
+.btn-icon {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.btn-icon:hover { color: var(--danger); border-color: var(--danger); }
+
+.add-contact { display: flex; gap: 8px; margin-bottom: 4px; }
+.add-contact input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 9px 10px;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  letter-spacing: 2px;
+  font-size: 13px;
+}
+.add-contact input:focus { outline: none; border-color: var(--cyan); }
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--cyan-dim);
+  color: var(--cyan);
+  border-radius: 6px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-secondary:hover { background: var(--cyan-glow); }
+
+.contact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+  flex: 1;
+}
+
+.contact-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 10px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+  transition: background 0.12s, border-color 0.12s;
+}
+.contact-row:hover { background: var(--bg-panel-raised); }
+.contact-row.active {
+  background: var(--bg-panel-raised);
+  border-color: var(--border);
+}
+
+.contact-meta { display: flex; flex-direction: column; min-width: 0; }
+.contact-name { font-weight: 600; font-size: 14px; }
+.contact-preview {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.empty-state {
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 20px 4px;
+}
+
+/* ── Chat pane ──────────────────────────────────────────────────── */
+
+.chat-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.chat-pane-placeholder {
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 15px;
+}
+
+.chat-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-with-name { font-weight: 700; font-size: 16px; margin-right: 10px; }
+.chat-with-code {
+  font-family: var(--font-display);
+  font-size: 11px;
+  color: var(--cyan-dim);
+  letter-spacing: 1px;
+}
+
+.message-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bubble {
+  max-width: 60%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bubble.mine {
+  align-self: flex-end;
+  background: linear-gradient(135deg, var(--cyan-dim), #045065);
+  color: #eafdff;
+  border-bottom-right-radius: 3px;
+}
+
+.bubble.theirs {
+  align-self: flex-start;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 3px;
+}
+
+.bubble-time {
+  font-size: 10px;
+  opacity: 0.6;
+  align-self: flex-end;
+}
+
+.message-form {
+  display: flex;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+}
+
+.message-form input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+.message-form input:focus { outline: none; border-color: var(--cyan); }
+.message-form .btn-primary { width: auto; padding: 0 22px; }
+
+/* ── Responsive ─────────────────────────────────────────────────── */
+
+@media (max-width: 720px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .app-shell.show-sidebar .sidebar { display: flex; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+
+</style>
+  <script type="module" src="auth.js"></script>
+</body>
+</html>

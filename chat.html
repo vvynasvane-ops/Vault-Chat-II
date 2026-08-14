@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VaultChatt II — Terminal</title>
+
+<link rel="icon" type="image/x-icon" href="favicon.ico" />
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+<link rel="manifest" href="site.webmanifest" />
+<meta name="theme-color" content="#080c14" />
+
+<link rel="stylesheet" href="style.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body class="app-body">
+  <div class="hex-field" aria-hidden="true"></div>
+
+  <div class="app-shell">
+
+    <aside class="sidebar" id="sidebar">
+      <div class="me-card">
+        <button id="my-avatar" class="avatar-btn" title="Change profile photo"></button>
+        <input id="my-avatar-input" type="file" accept="image/*" class="hidden" />
+        <div class="me-meta">
+          <span id="my-display-name" class="me-name">—</span>
+          <span class="idcode-row">
+            <span id="my-id-code" class="me-idcode">ID: ------</span>
+            <button id="btn-copy-idcode" class="btn-mini" title="Copy ID code">⧉</button>
+            <button id="btn-share-idcode" class="btn-mini" title="Share ID code">↗</button>
+          </span>
+        </div>
+        <button id="btn-appearance" class="btn-icon" title="Appearance">🎨</button>
+        <button id="btn-logout" class="btn-icon" title="Sign out">⏻</button>
+      </div>
+
+      <div class="add-contact">
+        <input id="input-friend-code" type="text" maxlength="6" placeholder="6-digit ID code" />
+        <button id="btn-add-contact" class="btn-secondary">+ Add</button>
+      </div>
+      <p id="add-contact-error" class="form-error"></p>
+
+      <input id="input-contact-search" type="text" class="search-input" placeholder="Search contacts…" />
+
+      <nav id="contact-list" class="contact-list" aria-label="Contacts"></nav>
+
+      <p id="empty-state" class="empty-state hidden">
+        No contacts yet. Ask someone for their 6-digit ID code, or share yours above.
+      </p>
+
+      <div class="home-bg-controls">
+        <button id="btn-set-home-bg" class="btn-link">Set home background</button>
+        <button id="btn-reset-home-bg" class="btn-link">Remove</button>
+        <input id="home-bg-input" type="file" accept="image/*" class="hidden" />
+      </div>
+    </aside>
+
+    <section id="chat-pane" class="chat-pane hidden">
+      <header class="chat-header">
+        <div>
+          <span id="chat-with-name" class="chat-with-name">—</span>
+          <span id="chat-with-code" class="chat-with-code">—</span>
+        </div>
+        <div class="chat-header-actions">
+          <button id="btn-remove-contact" class="btn-link danger">Remove contact</button>
+          <div class="menu-anchor">
+            <button id="btn-chat-menu" class="btn-icon" title="Chat menu">⋮</button>
+            <div id="chat-menu" class="dropdown-menu hidden">
+              <button id="btn-encryption-info" class="dropdown-item">🔒 Encryption info</button>
+              <button id="btn-view-media" class="dropdown-item">🖼 View media</button>
+              <button id="btn-set-wallpaper" class="dropdown-item">🖌 Set chat wallpaper</button>
+              <button id="btn-reset-wallpaper" class="dropdown-item">↺ Reset chat wallpaper</button>
+              <button id="btn-clear-chat" class="dropdown-item danger">🗑 Clear chat</button>
+            </div>
+          </div>
+        </div>
+      </header>
+      <input id="wallpaper-input" type="file" accept="image/*" class="hidden" />
+
+      <div id="pinned-bar" class="pinned-bar hidden">
+        📌 <span id="pinned-count">0 pinned messages</span>
+      </div>
+
+      <div id="message-log" class="message-log" aria-live="polite"></div>
+
+      <form id="message-form" class="message-form">
+        <button type="button" id="btn-attach-media" class="btn-icon" title="Send photo/video">🖼</button>
+        <button type="button" id="btn-attach-file" class="btn-icon" title="Send file">📎</button>
+        <input id="message-input" type="text" placeholder="Type an encrypted message…" autocomplete="off" />
+        <button type="submit" class="btn-primary" disabled>Send</button>
+      </form>
+      <input id="file-picker-images" type="file" accept="image/*,video/*" multiple class="hidden" />
+      <input id="file-picker-files" type="file" multiple class="hidden" />
+    </section>
+
+    <section id="no-chat-state" class="chat-pane chat-pane-placeholder">
+      <p>Select a contact to start an encrypted conversation.</p>
+    </section>
+
+  </div>
+
+  <!-- Floating menus -->
+  <div id="msg-context-menu" class="ctx-menu hidden"></div>
+
+  <!-- Appearance panel (Sections 10 & 11) -->
+  <div id="appearance-panel" class="dialog-backdrop hidden">
+    <div class="dialog">
+      <header class="dialog-header">
+        <h3>Appearance</h3>
+        <button class="btn-icon" data-close-dialog>✕</button>
+      </header>
+      <div class="dialog-body">
+        <label class="switch-row">
+          <span>Dark mode</span>
+          <input type="checkbox" id="theme-switch" />
+        </label>
+
+        <label class="field-label">Font family</label>
+        <select id="font-family-select" class="select-input"></select>
+
+        <label class="field-label">Font weight</label>
+        <select id="font-weight-select" class="select-input"></select>
+
+        <label class="field-label">Font size — <span id="font-size-label">100%</span></label>
+        <input type="range" id="font-size-slider" min="85" max="135" value="100" />
+
+        <label class="field-label">Font color</label>
+        <div id="font-color-grid" class="color-grid"></div>
+
+        <button id="btn-reset-appearance" class="btn-secondary full-width">Reset text style to default</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Encryption info dialog (Section 3) -->
+  <div id="encryption-dialog" class="dialog-backdrop hidden">
+    <div class="dialog">
+      <header class="dialog-header">
+        <h3>🔒 Encryption info</h3>
+        <button class="btn-icon" data-close-dialog>✕</button>
+      </header>
+      <div class="dialog-body">
+        <p>Messages are secured end-to-end:</p>
+        <ul class="info-list">
+          <li>X25519 (Curve25519) key exchange establishes a shared key with this contact.</li>
+          <li>AES-256-GCM encrypts every message and file.</li>
+          <li>Firebase Realtime Database is used only as transport — the server stores encrypted bytes only.</li>
+          <li>Each message is deleted from the server immediately after it's received and decrypted.</li>
+          <li>Your keys stay on this device only — never transmitted or backed up.</li>
+        </ul>
+        <p class="field-label">Your key fingerprint</p>
+        <p id="encryption-fingerprint" class="mono fingerprint">—</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Media gallery (Section 7) -->
+  <div id="media-gallery-dialog" class="dialog-backdrop hidden">
+    <div class="dialog dialog-wide">
+      <header class="dialog-header">
+        <h3>Media in this conversation</h3>
+        <button class="btn-icon" data-close-dialog>✕</button>
+      </header>
+      <div class="dialog-body">
+        <div id="media-gallery-grid" class="gallery-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pinned messages list (Section 6) -->
+  <div id="pinned-list-dialog" class="dialog-backdrop hidden">
+    <div class="dialog">
+      <header class="dialog-header">
+        <h3>📌 Pinned messages</h3>
+        <button class="btn-icon" data-close-dialog>✕</button>
+      </header>
+      <div class="dialog-body">
+        <div id="pinned-list-body" class="pinned-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
