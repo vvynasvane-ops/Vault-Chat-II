@@ -1111,3 +1111,16 @@ img, video { max-width: 100%; }
 .gif-cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .gif-cell.sending { opacity: 0.4; pointer-events: none; }
 .gif-grid-empty { grid-column: 1 / -1; text-align: center; color: var(--text-dim); font-size: 13px; padding: 20px 0; }
+
+/* On touch devices the platform keyboard already has its own emoji/GIF/
+   sticker tray (Gboard, SwiftKey, iOS) — app.js already accepts whatever
+   that inserts via the message-input "paste" handler. Showing our own
+   emoji/GIF buttons there too just eats typing space for a duplicate
+   feature, so they're only shown where there's no such keyboard: wider
+   viewports AND a fine (mouse-like) pointer. A narrow *desktop* window
+   (e.g. a resized browser, or a responsive-design check with a mouse)
+   correctly keeps the buttons, since (pointer: coarse) won't match there.
+   Attach/file buttons stay — the keyboard has no equivalent for those. */
+@media (max-width: 720px) and (pointer: coarse) {
+  #btn-emoji, #btn-gif { display: none; }
+}
