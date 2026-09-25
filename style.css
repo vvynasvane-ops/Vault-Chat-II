@@ -255,14 +255,29 @@ input:focus {
 
 /* ── App shell ──────────────────────────────────────────────────── */
 
-.app-body { height: 100vh; overflow: hidden; }
+/* Section 4 — screen stability: the body is a flex column of [optional
+   notify banner] + [app shell]. The shell takes whatever height is left
+   (flex: 1, min-height: 0) instead of a hardcoded 100vh, so a banner (or
+   any future top-of-page bar) can never push the message input off the
+   bottom of the screen — the one bug that used to happen here. 100dvh
+   (falls back to 100vh) also keeps the layout correct on mobile browsers
+   whose address bar shows/hides and changes the visual viewport height. */
+
+.app-body {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
 
 .app-shell {
   position: relative;
   z-index: 2;
   display: grid;
   grid-template-columns: 320px 1fr;
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
 }
 
 .sidebar {
@@ -393,7 +408,8 @@ input:focus {
 .chat-pane {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%; /* fill its app-shell grid cell exactly — see .app-body fix above */
+  min-height: 0;
 }
 
 .chat-pane-placeholder {
@@ -461,30 +477,46 @@ input:focus {
 
 .message-form {
   display: flex;
+  align-items: center;
   gap: 10px;
-  padding: 16px 24px;
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--border);
+  flex-wrap: nowrap;
+  flex-shrink: 0; /* never let the log's scroll area compress the input row */
+}
+
+/* Section 5 — the typing field stays visible and usable at every width:
+   min-width:0 lets it shrink instead of forcing the form to overflow, and
+   attach buttons + send button never shrink below a tappable size. */
+.message-form #message-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.message-form .btn-icon,
+.message-form .btn-primary {
+  flex: 0 0 auto;
 }
 
 .message-form input {
-  flex: 1;
   background: rgba(0, 0, 0, 0.35);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px 14px;
   color: var(--text-primary);
   font-size: 14px;
+  width: 100%;
 }
 .message-form input:focus { outline: none; border-color: var(--cyan); }
-.message-form .btn-primary { width: auto; padding: 0 22px; }
+.message-form .btn-primary { width: auto; padding: 0 18px; white-space: nowrap; }
 
-/* ── Responsive ─────────────────────────────────────────────────── */
-
-@media (max-width: 720px) {
-  .app-shell { grid-template-columns: 1fr; }
-  .sidebar { display: none; }
-  .app-shell.show-sidebar .sidebar { display: flex; }
+@media (max-width: 480px) {
+  .message-form { padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px)); gap: 6px; }
+  .message-form .btn-primary { padding: 0 14px; font-size: 13px; }
+  .chat-header { padding: 12px 14px; }
+  .message-log { padding: 14px; }
 }
+
+
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
@@ -810,3 +842,205 @@ audio { max-width: 220px; }
   z-index: 300;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── Unread badges (Section 13 — new notification system) ─────────── */
+
+.unread-pill {
+  flex-shrink: 0;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+}
+
+/* ── Message requests — unknown-sender conversations (Section 6) ──── */
+
+.requests-section {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  margin: 10px 0 6px;
+  background: rgba(0, 229, 255, 0.04);
+}
+.requests-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cyan);
+}
+.requests-count {
+  background: var(--danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.requests-hint { font-size: 11px; color: var(--text-dim); margin: 4px 0 8px; line-height: 1.4; }
+.requests-list { gap: 4px; margin-top: 0; flex: none; }
+
+.request-row { padding-right: 6px; }
+.new-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--online);
+  border: 1px solid var(--online);
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.request-actions { display: flex; gap: 4px; flex-shrink: 0; margin-left: auto; }
+.request-actions .btn-mini {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+}
+.request-actions .req-accept { color: var(--online); border-color: var(--online); }
+.request-actions .req-block.danger { color: var(--danger); border-color: var(--danger); }
+
+/* ── Notification permission banner (Section 13) ───────────────────── */
+
+.notify-banner {
+  position: relative;
+  z-index: 1; /* below .app-shell (z 2) so the mobile drawer can cover it */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 10px 20px calc(10px + env(safe-area-inset-top, 0px));
+  background: linear-gradient(135deg, var(--cyan-dim), #045065);
+  color: #eafdff;
+  font-size: 13px;
+}
+.notify-banner-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+.notify-banner .btn-secondary { border-color: rgba(255,255,255,0.6); color: #eafdff; padding: 6px 14px; }
+.notify-banner .btn-link { color: rgba(234,253,255,0.75); padding: 0; }
+
+/* ── Google sign-in button (Section 3 — auth upgrade) ──────────────── */
+
+.btn-google {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #fff;
+  color: #1f1f1f;
+  border: 1px solid rgba(0,0,0,0.1);
+  border-radius: 6px;
+  padding: 11px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  margin-top: 12px;
+}
+.btn-google:hover { filter: brightness(0.97); }
+.btn-google svg { width: 18px; height: 18px; }
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 2px;
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.auth-divider::before, .auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── General screen stability ───────────────────────────────────────── */
+
+html, body { overscroll-behavior: none; }
+.app-shell, .sidebar, .chat-pane { min-height: 0; } /* allow inner flex children to scroll instead of overflowing the page */
+img, video { max-width: 100%; }
+
+/* ── Screen stability & the mobile menu button (Section 4) ────────────
+   Below 720px the sidebar becomes a full-height overlay drawer instead of
+   a grid column, toggled by #btn-menu. This keeps the chat pane — and
+   critically the message input — from ever being squeezed or pushed
+   off-screen by the contact list competing for width. */
+
+.chat-header-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; flex: 1; }
+.chat-with-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.menu-btn { display: none; flex-shrink: 0; }
+.menu-btn-floating {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  background: var(--bg-panel-raised);
+  z-index: 3;
+}
+.chat-pane-placeholder { position: relative; }
+
+.sidebar-scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 55;
+}
+
+@media (max-width: 720px) {
+  .app-shell { grid-template-columns: 1fr; position: relative; overflow: hidden; }
+  .menu-btn { display: inline-flex; align-items: center; justify-content: center; }
+
+  .sidebar {
+    position: fixed;
+    top: 0; bottom: 0; left: 0;
+    right: 18%;
+    z-index: 60;
+    width: auto;
+    max-width: 360px;
+    transform: translateX(-105%);
+    transition: transform 0.22s ease;
+    box-shadow: 20px 0 40px rgba(0, 0, 0, 0.4);
+  }
+  .app-shell.show-sidebar .sidebar {
+    display: flex;
+    transform: translateX(0);
+  }
+  .app-shell.show-sidebar .sidebar-scrim { display: block; }
+
+  .chat-pane, .chat-pane-placeholder { width: 100%; }
+}
+
+@media (min-width: 721px) {
+  .sidebar-scrim { display: none !important; }
+}
+
+/* Composer controls: consistent tappable height so Send never collapses */
+.message-form .btn-icon { width: 40px; height: 40px; }
+.message-form .btn-primary { height: 40px; }
+.message-form #message-input { height: 40px; padding-top: 0; padding-bottom: 0; }
+
+/* Header polish on small screens: keep title readable, move "Remove contact" into the ⋮ menu */
+.chat-header { gap: 10px; align-items: center; }
+.mobile-only-item { display: none; }
+@media (max-width: 720px) {
+  .chat-header-actions .btn-link.danger { display: none; }
+  .mobile-only-item { display: block; }
+  .chat-header-title { flex-direction: column; gap: 2px; align-items: flex-start; }
+}

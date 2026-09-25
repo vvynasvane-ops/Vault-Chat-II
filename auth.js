@@ -4,6 +4,8 @@
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
   onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { auth } from "./firebase-config.js";
@@ -13,6 +15,8 @@ import {
   ensureIdCode,
 } from "./firestore-api.js";
 import { getOrCreatePublicKeyBase64 } from "./crypto.js";
+
+const googleProvider = new GoogleAuthProvider();
 
 const els = {
   form: document.getElementById("auth-form"),
@@ -26,6 +30,7 @@ const els = {
   password: document.getElementById("input-password"),
   usernameInput: document.getElementById("input-username"),
   displayNameInput: document.getElementById("input-display-name"),
+  google: document.getElementById("btn-google"),
 };
 
 let isLoginMode = true;
@@ -130,6 +135,66 @@ async function doRegister() {
   window.location.href = "chat.html";
 }
 
+// ─── Google Sign-In (Section 3 — auth upgrade) ────────────────────────────
+// One popup handles both first-time sign-up AND returning sign-in: if the
+// Firestore /users/{uid} doc doesn't exist yet, we create it here exactly
+// like doRegister() does for email/password, so both paths converge on the
+// same profile shape the Android app expects.
+
+els.google.addEventListener("click", async () => {
+  setError("");
+  setLoading(true);
+  try {
+    const cred = await signInWithPopup(auth, googleProvider);
+    const uid = cred.user.uid;
+
+    let profile;
+    try {
+      profile = await getProfile(uid);
+      if (!profile.idCode) {
+        try {
+          profile.idCode = await ensureIdCode(uid);
+        } catch (_) {}
+      }
+    } catch (_) {
+      // First time signing in with this Google account — provision a profile.
+      const displayName = cred.user.displayName || "New user";
+      const username = await uniqueUsernameFromGoogle(cred.user);
+      const publicKeyBase64 = await getOrCreatePublicKeyBase64();
+      const newProfile = {
+        uid,
+        username,
+        displayName,
+        publicKeyBase64,
+        fcmToken: "",
+        createdAt: Date.now(),
+        lastSeen: Date.now(),
+        isOnline: true,
+      };
+      const idCode = await createAccountAtomically(newProfile);
+      profile = { ...newProfile, idCode };
+    }
+
+    await getOrCreatePublicKeyBase64();
+    saveSession(uid, cred.user.email, profile.username, profile.displayName, profile.idCode);
+    window.location.href = "chat.html";
+  } catch (err) {
+    if (err.code !== "auth/popup-closed-by-user") setError(friendlyError(err));
+  } finally {
+    setLoading(false);
+  }
+});
+
+async function uniqueUsernameFromGoogle(user) {
+  const base = (user.email ? user.email.split("@")[0] : user.displayName || "user")
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, "")
+    .slice(0, 24) || "user";
+  const suffix = Math.floor(1000 + Math.random() * 9000);
+  const candidate = `${base}${suffix}`;
+  return candidate.length >= 3 ? candidate : `user${suffix}`;
+}
+
 function saveSession(uid, email, username, displayName, idCode) {
   localStorage.setItem(
     "vc_session",
@@ -159,5 +224,8 @@ function friendlyError(err) {
   if (code.includes("user-not-found") || code.includes("wrong-password") || code.includes("invalid-credential"))
     return "Incorrect email or password.";
   if (code.includes("network-request-failed")) return "Network error — check your connection.";
+  if (code.includes("account-exists-with-different-credential"))
+    return "That email is already registered with a password — sign in that way instead.";
+  if (code.includes("popup-blocked")) return "Your browser blocked the Google sign-in popup — allow popups and try again.";
   return err.message || "Something went wrong — please try again.";
 }

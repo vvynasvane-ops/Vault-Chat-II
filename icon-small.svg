@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<defs>
+  <radialGradient id="bg" cx="50%" cy="42%" r="75%">
+    <stop offset="0" stop-color="#11304a"/>
+    <stop offset="0.55" stop-color="#0a1626"/>
+    <stop offset="1" stop-color="#050912"/>
+  </radialGradient>
+  <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#8ff6ff"/>
+    <stop offset="1" stop-color="#0891a8"/>
+  </linearGradient>
+  <linearGradient id="hexstroke" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#3ee9ff"/>
+    <stop offset="1" stop-color="#0a8fa8"/>
+  </linearGradient>
+  <linearGradient id="gem" x1="0.15" y1="0" x2="0.85" y2="1">
+    <stop offset="0" stop-color="#b8fbff"/>
+    <stop offset="0.45" stop-color="#00e5ff"/>
+    <stop offset="1" stop-color="#0891a8"/>
+  </linearGradient>
+  <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+    <stop offset="0" stop-color="#00e5ff" stop-opacity="0.55"/>
+    <stop offset="0.6" stop-color="#00e5ff" stop-opacity="0.12"/>
+    <stop offset="1" stop-color="#00e5ff" stop-opacity="0"/>
+  </radialGradient>
+  <filter id="blur6" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="6"/></filter>
+  <filter id="blur10" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="10"/></filter>
+</defs>
+<rect x="8" y="8" width="496" height="496" rx="112" fill="url(#bg)"/><rect x="11" y="11" width="490" height="490" rx="109" fill="none" stroke="url(#rim)" stroke-opacity="0.75" stroke-width="6"/><circle cx="256" cy="256" r="150" fill="url(#halo)"/>
+<polygon points="256.00,88.00 401.49,172.00 401.49,340.00 256.00,424.00 110.51,340.00 110.51,172.00" fill="none" stroke="url(#hexstroke)" stroke-width="24" stroke-linejoin="round"/>
+<polygon points="256.00,154.00 358.00,256.00 256.00,358.00 154.00,256.00" fill="#00e5ff" fill-opacity="0.6" filter="url(#blur10)"/>
+<polygon points="256.00,160.00 352.00,256.00 256.00,352.00 160.00,256.00" fill="url(#gem)"/>
+<polygon points="256.00,216.00 296.00,256.00 256.00,296.00 216.00,256.00" fill="#07101c"/>
+<polygon points="256.00,239.20 272.80,256.00 256.00,272.80 239.20,256.00" fill="#00e5ff"/></svg>

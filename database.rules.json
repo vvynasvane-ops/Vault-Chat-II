@@ -1,0 +1,36 @@
+{
+  "rules": {
+
+    "messages": {
+      "$recipientUid": {
+        // Only the recipient can read their own inbox
+        ".read": "auth != null && auth.uid === $recipientUid",
+
+        "$messageId": {
+          // Any authenticated user can write to another user's inbox (to send a message)
+          // The recipient can delete their own messages (after reading)
+          ".write": "auth != null && (!data.exists() || auth.uid === $recipientUid)",
+
+          // Validate message structure -- EDIT and DELETE_EVERYONE (Section 5) added to the type list
+          ".validate": "newData.hasChildren(['messageId','senderId','type','timestamp']) && newData.child('senderId').val() === auth.uid && newData.child('timestamp').isNumber() && newData.child('type').val().matches(/^(TEXT|IMAGE|VIDEO|FILE|AUDIO|KEY_EXCHANGE|DELIVERY_ACK|READ_ACK|EDIT|DELETE_EVERYONE)$/)"
+        }
+      }
+    },
+
+    "presence": {
+      "$uid": {
+        // Anyone logged in can read presence (to show online status)
+        ".read":  "auth != null",
+        // Only the user themselves can write their own presence
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.hasChildren(['isOnline','lastSeen']) && newData.child('isOnline').isBoolean() && newData.child('lastSeen').isNumber()"
+      }
+    },
+
+    // Block everything else
+    "$other": {
+      ".read":  false,
+      ".write": false
+    }
+  }
+}

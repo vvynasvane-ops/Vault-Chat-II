@@ -8,9 +8,18 @@
 <link rel="icon" type="image/x-icon" href="favicon.ico" />
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+<link rel="icon" type="image/svg+xml" href="icon.svg" />
+<link rel="mask-icon" href="safari-pinned-tab.svg" color="#00e5ff" />
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
+<link rel="apple-touch-icon" sizes="167x167" href="apple-touch-icon-167.png" />
+<link rel="apple-touch-icon" sizes="152x152" href="apple-touch-icon-152.png" />
 <link rel="manifest" href="site.webmanifest" />
+<meta name="msapplication-config" content="browserconfig.xml" />
 <meta name="theme-color" content="#080c14" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
 <link rel="stylesheet" href="style.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -19,7 +28,17 @@
 <body class="app-body">
   <div class="hex-field" aria-hidden="true"></div>
 
-  <div class="app-shell">
+  <div id="notify-banner" class="notify-banner hidden">
+    <span>🔔 Turn on notifications to see new messages when this tab isn't in front.</span>
+    <span class="notify-banner-actions">
+      <button id="btn-enable-notify" class="btn-secondary">Enable</button>
+      <button id="btn-dismiss-notify" class="btn-link">Not now</button>
+    </span>
+  </div>
+
+  <div class="app-shell" id="app-shell">
+
+    <div id="sidebar-scrim" class="sidebar-scrim"></div>
 
     <aside class="sidebar" id="sidebar">
       <div class="me-card">
@@ -38,17 +57,27 @@
       </div>
 
       <div class="add-contact">
-        <input id="input-friend-code" type="text" maxlength="6" placeholder="6-digit ID code" />
+        <input id="input-friend-code" type="text" maxlength="6" placeholder="6-char ID code" autocapitalize="characters" />
         <button id="btn-add-contact" class="btn-secondary">+ Add</button>
       </div>
       <p id="add-contact-error" class="form-error"></p>
 
       <input id="input-contact-search" type="text" class="search-input" placeholder="Search contacts…" />
 
+      <section id="requests-section" class="requests-section hidden">
+        <div class="requests-heading">
+          <span>💬 Message requests</span>
+          <span id="requests-count" class="requests-count hidden">0</span>
+        </div>
+        <p class="requests-hint">People who messaged you using your ID code, before you added them.</p>
+        <nav id="requests-list" class="contact-list requests-list" aria-label="Message requests"></nav>
+      </section>
+
       <nav id="contact-list" class="contact-list" aria-label="Contacts"></nav>
 
       <p id="empty-state" class="empty-state hidden">
-        No contacts yet. Ask someone for their 6-digit ID code, or share yours above.
+        No contacts yet. Ask someone for their ID code, or share yours above — and new conversations
+        from anyone who messages your ID code will show up under Message requests.
       </p>
 
       <div class="home-bg-controls">
@@ -60,7 +89,8 @@
 
     <section id="chat-pane" class="chat-pane hidden">
       <header class="chat-header">
-        <div>
+        <button id="btn-menu" class="btn-icon menu-btn" title="Contacts">☰</button>
+        <div class="chat-header-title">
           <span id="chat-with-name" class="chat-with-name">—</span>
           <span id="chat-with-code" class="chat-with-code">—</span>
         </div>
@@ -74,6 +104,7 @@
               <button id="btn-set-wallpaper" class="dropdown-item">🖌 Set chat wallpaper</button>
               <button id="btn-reset-wallpaper" class="dropdown-item">↺ Reset chat wallpaper</button>
               <button id="btn-clear-chat" class="dropdown-item danger">🗑 Clear chat</button>
+              <button id="btn-remove-contact-menu" class="dropdown-item danger mobile-only-item">✕ Remove contact</button>
             </div>
           </div>
         </div>
@@ -97,6 +128,7 @@
     </section>
 
     <section id="no-chat-state" class="chat-pane chat-pane-placeholder">
+      <button id="btn-menu-empty" class="btn-icon menu-btn menu-btn-floating" title="Contacts">☰</button>
       <p>Select a contact to start an encrypted conversation.</p>
     </section>
 

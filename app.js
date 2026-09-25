@@ -17,7 +17,22 @@ import {
   updatePublicKey,
   updateProfilePhoto,
   listenToProfile,
+  blockUser,
+  unblockUser,
+  getBlockedUids,
+  normalizeIdCode,
+  ID_CODE_PATTERN,
 } from "./firestore-api.js";
+import {
+  initNotifications,
+  requestNotificationPermission,
+  notificationPermission,
+  notifyIncomingMessage,
+  bumpUnread,
+  clearUnread,
+  getUnreadCount,
+  onUnreadChange,
+} from "./notifications.js";
 import { getOrCreatePublicKeyBase64, getStoredKeyPair, toBase64 } from "./crypto.js";
 import {
   sendText,
@@ -53,7 +68,9 @@ import {
 
 let myUid = null;
 let myProfile = null;
-let contacts = new Map(); // uid -> profile
+let contacts = new Map(); // uid -> profile (includes accepted contacts AND pending requesters)
+let pendingUids = new Set(); // uids present in `contacts` only because they messaged us, unadded
+let blockedUids = new Set();
 let contactUnsubscribers = new Map(); // uid -> onSnapshot unsubscribe
 let activeContactUid = null;
 let activeMenuMessageId = null;
@@ -106,6 +123,16 @@ const els = {
   homeBgInput: document.getElementById("home-bg-input"),
   pinnedListDialog: document.getElementById("pinned-list-dialog"),
   pinnedListBody: document.getElementById("pinned-list-body"),
+  appShell: document.getElementById("app-shell"),
+  btnMenu: document.getElementById("btn-menu"),
+  btnMenuEmpty: document.getElementById("btn-menu-empty"),
+  sidebarScrim: document.getElementById("sidebar-scrim"),
+  requestsSection: document.getElementById("requests-section"),
+  requestsList: document.getElementById("requests-list"),
+  requestsCount: document.getElementById("requests-count"),
+  notifyBanner: document.getElementById("notify-banner"),
+  btnEnableNotify: document.getElementById("btn-enable-notify"),
+  btnDismissNotify: document.getElementById("btn-dismiss-notify"),
 };
 
 onAuthStateChanged(auth, async (user) => {
@@ -120,6 +147,13 @@ onAuthStateChanged(auth, async (user) => {
 async function boot() {
   await initAppearance();
   setupAppearancePanel();
+  await initNotifications();
+  onUnreadChange(() => {
+    refreshUnreadBadges();
+    refreshRequestsCount();
+  });
+  setupNotificationBanner();
+  setupMobileMenu();
 
   myProfile = await getProfile(myUid);
   els.myName.textContent = myProfile.displayName;
@@ -136,7 +170,9 @@ async function boot() {
 
   await applyWallpaper("home", els.sidebar);
 
+  blockedUids = new Set(await getBlockedUids(myUid).catch(() => []));
   await refreshContacts();
+  await refreshRequests();
 
   startInbox(myUid, {
     resolveSender: async (uid) => contacts.get(uid) || (await getProfile(uid)),
@@ -184,12 +220,40 @@ async function boot() {
   });
 }
 
-function handleIncoming(localMessage) {
-  if (localMessage.senderId === activeContactUid) {
+// Section 6 (new) — unknown-sender conversations: any inbound message from
+// a uid we haven't seen before (not a contact, not already pending, not
+// blocked) surfaces immediately as a "message request" row, instead of
+// being silently relayed-and-deleted with nowhere for the user to see it.
+async function handleIncoming(localMessage) {
+  const senderUid = localMessage.senderId;
+
+  if (blockedUids.has(senderUid)) return; // blocked strangers: drop silently, no notification
+
+  let profile = contacts.get(senderUid);
+  let isNewSender = false;
+  if (!profile) {
+    try {
+      profile = await getProfile(senderUid);
+    } catch (_) {
+      profile = { uid: senderUid, displayName: "Unknown", idCode: "" };
+    }
+    contacts.set(senderUid, profile);
+    if (!(await isKnownContact(senderUid))) {
+      pendingUids.add(senderUid);
+      isNewSender = true;
+    }
+    upsertContactRow(profile);
+    await refreshRequests();
+  }
+
+  const previewText =
+    localMessage.messageType === "TEXT" ? localMessage.content : `📎 ${localMessage.content}`;
+
+  if (senderUid === activeContactUid && document.visibilityState === "visible") {
     renderMessage(localMessage);
     scrollToBottom();
-    // Chat is open — mark read immediately and notify the sender (Section 3).
-    sendReadAck(localMessage.senderId, myUid, [localMessage.messageId]);
+    // Chat is open and visible — mark read immediately and notify the sender (Section 3).
+    sendReadAck(senderUid, myUid, [localMessage.messageId]);
     idb.get("messages", localMessage.messageId).then((m) => {
       if (m) {
         m.status = "READ";
@@ -197,13 +261,21 @@ function handleIncoming(localMessage) {
       }
     });
   } else {
-    sendDeliveryAck(localMessage.senderId, myUid, localMessage.messageId);
+    sendDeliveryAck(senderUid, myUid, localMessage.messageId);
+    await bumpUnread(senderUid);
+    notifyIncomingMessage({
+      fromName: profile.displayName || "Unknown",
+      preview: previewText,
+      isNewSender,
+      onClick: () => openConversation(senderUid),
+    });
   }
-  bumpContactPreview(
-    localMessage.senderId,
-    localMessage.messageType === "TEXT" ? localMessage.content : `📎 ${localMessage.content}`,
-    localMessage.timestamp
-  );
+  bumpContactPreview(senderUid, previewText, localMessage.timestamp);
+}
+
+async function isKnownContact(uid) {
+  const uids = await getContactUids(myUid);
+  return uids.includes(uid);
 }
 
 // ─── Contacts (Section 2) ─────────────────────────────────────────────
@@ -248,6 +320,10 @@ async function refreshContacts() {
 }
 
 function renderContactRow(profile) {
+  // Pending (unknown-sender) rows render into the dedicated Requests
+  // section instead of the main contact list — see refreshRequests().
+  if (pendingUids.has(profile.uid)) return;
+
   const row = document.createElement("div");
   row.className = "contact-row";
   row.dataset.uid = profile.uid;
@@ -255,6 +331,7 @@ function renderContactRow(profile) {
   row.addEventListener("click", (e) => {
     if (e.target.closest(".contact-row-menu-btn")) return;
     openConversation(profile.uid);
+    closeMobileSidebar();
   });
   attachContactContextMenu(row, profile.uid);
   els.contactList.appendChild(row);
@@ -262,6 +339,7 @@ function renderContactRow(profile) {
 }
 
 function upsertContactRow(profile) {
+  if (pendingUids.has(profile.uid)) return;
   let row = els.contactList.querySelector(`[data-uid="${profile.uid}"]`);
   if (!row) {
     renderContactRow(profile);
@@ -272,6 +350,7 @@ function upsertContactRow(profile) {
 }
 
 function fillContactRow(row, profile) {
+  const unread = getUnreadCount(profile.uid);
   row.innerHTML = `
     <span class="avatar-wrap">
       ${avatarHtml(profile.profilePhotoBase64, profile.displayName, 34)}
@@ -282,7 +361,113 @@ function fillContactRow(row, profile) {
       <span class="contact-preview">ID ${escapeHtml(profile.idCode || "")}</span>
     </span>
     <span class="contact-badges"></span>
+    <span class="unread-pill ${unread ? "" : "hidden"}">${unread > 99 ? "99+" : unread}</span>
   `;
+}
+
+function refreshUnreadBadges() {
+  els.contactList.querySelectorAll(".contact-row").forEach((row) => {
+    const pill = row.querySelector(".unread-pill");
+    if (!pill) return;
+    const n = getUnreadCount(row.dataset.uid);
+    pill.textContent = n > 99 ? "99+" : String(n);
+    pill.classList.toggle("hidden", n === 0);
+  });
+}
+
+// ─── Message requests (Section 6 — new): conversations from people who   ──
+// messaged us before we added them. Shown separately with Accept / Block,
+// so a stranger's message is always visible, never silently swallowed.
+
+async function refreshRequests() {
+  const contactUidList = await getContactUids(myUid);
+  const known = new Set(contactUidList);
+  const allMessages = await idb.getAll("messages").catch(() => []);
+  const senderUids = new Set();
+  for (const m of allMessages) {
+    if (!m.isSentByMe && m.senderId && m.senderId !== myUid) senderUids.add(m.senderId);
+  }
+
+  pendingUids = new Set([...senderUids].filter((uid) => !known.has(uid) && !blockedUids.has(uid)));
+
+  els.requestsList.innerHTML = "";
+  if (pendingUids.size === 0) {
+    els.requestsSection.classList.add("hidden");
+    refreshRequestsCount();
+    return;
+  }
+  els.requestsSection.classList.remove("hidden");
+
+  for (const uid of pendingUids) {
+    let profile = contacts.get(uid);
+    if (!profile) {
+      try {
+        profile = await getProfile(uid);
+        contacts.set(uid, profile);
+      } catch (_) {
+        profile = { uid, displayName: "Unknown", idCode: "" };
+      }
+    }
+    els.requestsList.appendChild(buildRequestRow(profile));
+  }
+  refreshRequestsCount();
+}
+
+function refreshRequestsCount() {
+  let total = 0;
+  pendingUids.forEach((uid) => (total += getUnreadCount(uid)));
+  const n = pendingUids.size;
+  els.requestsCount.textContent = total > 0 ? `${n} · ${total} new` : `${n}`;
+  els.requestsCount.classList.toggle("hidden", n === 0);
+}
+
+function buildRequestRow(profile) {
+  const row = document.createElement("div");
+  row.className = "contact-row request-row";
+  row.dataset.uid = profile.uid;
+  const unread = getUnreadCount(profile.uid);
+  row.innerHTML = `
+    <span class="avatar-wrap">
+      ${avatarHtml(profile.profilePhotoBase64, profile.displayName, 34)}
+    </span>
+    <span class="contact-meta">
+      <span class="contact-name">${escapeHtml(profile.displayName)} <span class="badge new-badge">NEW</span></span>
+      <span class="contact-preview">ID ${escapeHtml(profile.idCode || "—")}</span>
+    </span>
+    <span class="unread-pill ${unread ? "" : "hidden"}">${unread > 99 ? "99+" : unread}</span>
+    <span class="request-actions">
+      <button type="button" class="btn-mini req-accept" title="Accept">✓</button>
+      <button type="button" class="btn-mini req-block danger" title="Block">✕</button>
+    </span>
+  `;
+  row.addEventListener("click", (e) => {
+    if (e.target.closest(".request-actions")) return;
+    openConversation(profile.uid);
+    closeMobileSidebar();
+  });
+  row.querySelector(".req-accept").addEventListener("click", async (e) => {
+    e.stopPropagation();
+    await addContact(myUid, profile.uid);
+    pendingUids.delete(profile.uid);
+    await refreshContacts();
+    await refreshRequests();
+    flashToast(`${profile.displayName} added to contacts`);
+  });
+  row.querySelector(".req-block").addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (!confirm(`Block ${profile.displayName}? Their messages will stop appearing here.`)) return;
+    await blockUser(myUid, profile.uid);
+    blockedUids.add(profile.uid);
+    pendingUids.delete(profile.uid);
+    await clearUnread(profile.uid);
+    if (activeContactUid === profile.uid) {
+      els.chatPane.classList.add("hidden");
+      activeContactUid = null;
+    }
+    await refreshRequests();
+    flashToast(`${profile.displayName} blocked`);
+  });
+  return row;
 }
 
 async function applyContactPrefsToRow(row, uid) {
@@ -368,7 +553,9 @@ els.contactList.addEventListener("touchend", (e) => {
 
 async function openConversation(uid) {
   activeContactUid = uid;
-  const profile = contacts.get(uid);
+  const profile = contacts.get(uid) || (await getProfile(uid).catch(() => ({ uid, displayName: "Unknown" })));
+  contacts.set(uid, profile);
+  await clearUnread(uid);
   els.chatPane.classList.remove("hidden");
   document.getElementById("no-chat-state").classList.add("hidden");
   els.chatWithName.textContent = profile.displayName;
@@ -716,11 +903,18 @@ els.messageLog.addEventListener("drop", (e) => {
 
 // ─── Add / remove contact ─────────────────────────────────────────────
 
+// ID codes are now alphanumeric (Section 1 upgrade) — uppercase live as the
+// user types, so "a3k9pq" reads back as "A3K9PQ" before it's ever submitted.
+els.addContactInput.addEventListener("input", () => {
+  const upper = els.addContactInput.value.toUpperCase();
+  if (upper !== els.addContactInput.value) els.addContactInput.value = upper;
+});
+
 els.addContactBtn.addEventListener("click", async () => {
-  const code = els.addContactInput.value.trim();
+  const code = normalizeIdCode(els.addContactInput.value);
   els.addContactError.textContent = "";
-  if (!/^\d{6}$/.test(code)) {
-    els.addContactError.textContent = "Enter a 6-digit ID code.";
+  if (!ID_CODE_PATTERN.test(code)) {
+    els.addContactError.textContent = "Enter a 6-character ID code (letters & numbers).";
     return;
   }
   try {
@@ -729,10 +923,16 @@ els.addContactBtn.addEventListener("click", async () => {
       els.addContactError.textContent = "That's your own ID code.";
       return;
     }
+    if (blockedUids.has(profile.uid)) {
+      await unblockUser(myUid, profile.uid);
+      blockedUids.delete(profile.uid);
+    }
     await addContact(myUid, profile.uid);
     await sendKeyExchange(myUid, profile.uid, await getOrCreatePublicKeyBase64());
     els.addContactInput.value = "";
+    pendingUids.delete(profile.uid);
     await refreshContacts();
+    await refreshRequests();
   } catch (err) {
     els.addContactError.textContent =
       err.message === "User not found" ? "No account with that ID code." : err.message;
@@ -747,6 +947,8 @@ els.removeContactBtn.addEventListener("click", async () => {
   activeContactUid = null;
   await refreshContacts();
 });
+
+document.getElementById("btn-remove-contact-menu").addEventListener("click", () => els.removeContactBtn.click());
 
 els.logoutBtn.addEventListener("click", async () => {
   if (!confirm("Sign out?")) return;
@@ -1038,6 +1240,44 @@ document.querySelectorAll(".dialog-backdrop").forEach((backdrop) => {
     if (e.target === backdrop) closeDialog(backdrop);
   });
 });
+
+// ─── Mobile menu button (Section 4 — screen stability) ──────────────────
+// Below 720px the sidebar is hidden by default (see style.css); this button
+// toggles it as an overlay so the layout never fights for space with the
+// conversation view, and a scrim behind it closes on outside-tap.
+
+function setupMobileMenu() {
+  const toggle = () => els.appShell.classList.toggle("show-sidebar");
+  els.btnMenu.addEventListener("click", toggle);
+  els.btnMenuEmpty.addEventListener("click", toggle);
+  els.sidebarScrim.addEventListener("click", closeMobileSidebar);
+}
+
+function closeMobileSidebar() {
+  if (window.matchMedia("(max-width: 720px)").matches) {
+    els.appShell.classList.remove("show-sidebar");
+  }
+}
+
+// ─── Notification permission banner (Section 13 — new) ──────────────────
+// Asked once, dismissible, never re-shown once answered either way; the
+// choice is remembered in IndexedDB settings so it won't nag every reload.
+
+async function setupNotificationBanner() {
+  const dismissed = await idb.get("settings", "notifyBannerDismissed").catch(() => null);
+  if (notificationPermission() === "default" && !dismissed) {
+    els.notifyBanner.classList.remove("hidden");
+  }
+  els.btnEnableNotify.addEventListener("click", async () => {
+    await requestNotificationPermission();
+    els.notifyBanner.classList.add("hidden");
+    await idb.put("settings", true, "notifyBannerDismissed");
+  });
+  els.btnDismissNotify.addEventListener("click", async () => {
+    els.notifyBanner.classList.add("hidden");
+    await idb.put("settings", true, "notifyBannerDismissed");
+  });
+}
 
 function flashToast(text) {
   const toast = document.createElement("div");

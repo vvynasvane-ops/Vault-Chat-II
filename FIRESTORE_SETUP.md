@@ -1,30 +1,74 @@
 # VaultChatt II — Web Client Setup & Sync Guide
 
-## Feature-parity update (this revision)
+## What's new in this revision
 
-The web client now implements the full feature set from `Feature_Overview.md`,
-on top of the same Firebase project/config — nothing in `firebase-config.js`
-changed. Additions: message status ticks + read receipts, date separators,
-edit & delete-for-everyone/delete-for-me (long-press or right-click a
-bubble), pin/unpin + pinned bar, encrypted media/file sharing (multi-select,
-thumbnails, media gallery, share-out via Web Share API), per-chat wallpaper
-+ home background (stored in IndexedDB, fail-safe if the file goes
-missing), dark/light theme + font family/weight/size/color controls
-(app-wide via CSS variables, ID codes and fingerprints stay monospace),
-profile pictures (cropped/compressed client-side, stored as base64 on the
-user doc — no new Storage bucket needed), contact search/favourite/mute,
-and live contact profile sync. `idb.js` bumped `DB_VERSION` to 2 with a
-purely additive migration (new object stores only — nothing existing is
-touched, so no one's local history is lost on update).
+- **Alphanumeric ID codes** — new accounts get a 6-character code of letters + digits (e.g. `K7M2QX`). Existing 6-digit codes keep working. Input is case-insensitive.
+- **Message requests** — if someone messages you using your ID code before you've added them, the conversation appears under *Message requests* with Accept / Block. You can reply before accepting.
+- **Notification system** (`notifications.js`) — OS notifications (permission asked once, via a dismissible banner), unread pills per contact, tab-title counter `(3) VaultChatt II`, favicon badge, and a soft chime. Notification bodies show the message preview only while the tab is in the background.
+- **Google sign-in** — "Continue with Google" on the sign-in page.
+- **Mobile layout** — ☰ menu button opens the contact drawer on small screens; the message box stays visible at every size (the layout no longer relies on a fixed 100vh).
+- **New app icons** — all in the root folder alongside everything else, no subfolder, + `site.webmanifest` + `browserconfig.xml` (Android/Chrome incl. maskable + monochrome, iOS, Windows, favicon.ico, Safari pinned tab).
 
-Two Android-specific items were intentionally left as-is for the web
-client: the GIF/sticker tray is a mobile-keyboard feature with no browser
-equivalent, and full OS "share into the app" for files needs a service
-worker + hosting change beyond this pass (sharing *out* of the app already
-works via the Web Share API). Ask if you want either wired in next.
+> Notifications work while VaultChatt is open in a tab/window (foreground or background). Delivering them with the tab fully closed needs Firebase Cloud Messaging + a service worker — not included here.
 
 ---
 
+## A. Enable Google sign-in (Firebase Console)
+
+1. Open **console.firebase.google.com** → project **vault-chatt-ii**.
+2. **Build → Authentication → Sign-in method** → **Add new provider** → **Google**.
+3. Toggle **Enable**, choose a **Public-facing name** and a **Support email**, click **Save**.
+4. **Authentication → Settings → Authorized domains** → **Add domain** for wherever you host the site (e.g. your custom domain). `localhost`, `vault-chatt-ii.firebaseapp.com` and `vault-chatt-ii.web.app` are already listed. If you test via `127.0.0.1`, add that too.
+5. Reload the site and click **Continue with Google**. First-time Google users get a profile + ID code automatically.
+
+Troubleshooting: `auth/unauthorized-domain` → step 4. `auth/operation-not-allowed` → step 3. Popup blocked → allow popups for the site.
+
+*(Optional, Android app)* Google sign-in there also needs your SHA-1/SHA-256 added under Project settings → Your apps → Android, then a fresh `google-services.json`.
+
+## B. Security rules
+
+Both files in this folder are now your **actual deployed rules**, each merged
+with only the minimal changes needed — nothing else touched:
+
+**`firestore.rules`** — two changes from what you sent:
+1. `idCode.matches('^[0-9]{6}$')` → `'^[A-Z0-9]{6}$'` in three places
+   (`/users` create, `/users` update backfill, `/idcodes` create) — the
+   alphanumeric ID code upgrade (Section 1).
+2. A new `/blocks/{uid}/list/{blockedUid}` match block, identical in shape
+   to your existing `/contacts` block, backing the Block action on message
+   requests (Section 6).
+
+**`database.rules.json`** — one change from what you sent: the `.validate`
+type regex on `/messages/$recipientUid/$messageId` gained `EDIT` and
+`DELETE_EVERYONE` — your rules only listed
+`TEXT|IMAGE|VIDEO|FILE|AUDIO|KEY_EXCHANGE|DELIVERY_ACK|READ_ACK`, but the
+client (Section 5 — edit / delete-for-everyone) also sends those two types,
+which your deployed rules would currently reject. Everything else —
+`presence`, the read/write ownership checks, the `$other` deny-all — is
+untouched. Note: your pasted version had the long rule expressions wrapped
+across multiple lines inside the quotes for readability in the console;
+that's not valid JSON for a `.json` file the CLI deploys, so they're
+collapsed back to single lines here (same logic, same characters, just no
+embedded line breaks).
+
+Deploy:
+
+```
+firebase deploy --only firestore:rules,database --project vault-chatt-ii
+```
+
+## C. Files
+
+```
+index.html / chat.html      pages          style.css      styling
+auth.js / app.js            page logic     notifications.js  NEW notification system
+firebase-config.js          Firebase init  firestore-api.js / messaging.js / crypto.js / idb.js / appearance.js
+site.webmanifest / browserconfig.xml       icon-*.png, favicon*, apple-touch-icon*  NEW icon set (+ SVG masters), all flat in this same folder
+favicon.ico, apple-touch-icon.png, favicon-*.png
+```
+All files sit in one folder (the HTML/JS reference each other without css/ or js/ subfolders).
+
+---
 
 This web app is **not a separate product** — it's a second client for the exact same
 Firebase project (`vault-chatt-ii`) your Android app already uses. Same users, same
@@ -171,7 +215,7 @@ library (`@noble/curves`) instead of the native API.
 
 1. Open the web app, register a **new** account (or sign in with an existing
    Android account's email/password — same Firebase Auth user works on both).
-2. Note the 6-digit ID code shown top-left.
+2. Note the ID code shown top-left.
 3. On your Android phone, add that ID code as a contact (or vice versa).
 4. Send a message from either side — it should appear on the other within
    a second or two, decrypted correctly.

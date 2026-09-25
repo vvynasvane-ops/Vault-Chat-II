@@ -1,0 +1,60 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{uid} {
+      allow read: if request.auth != null;
+
+      allow create: if request.auth != null
+                    && request.auth.uid == uid
+                    && request.resource.data.keys().hasAll(['uid','username','displayName','idCode','publicKeyBase64','fcmToken'])
+                    && !('email' in request.resource.data)
+                    && request.resource.data.uid == uid
+                    && request.resource.data.username is string
+                    && request.resource.data.username.size() >= 3
+                    && request.resource.data.username.size() <= 30
+                    && request.resource.data.idCode is string
+                    && request.resource.data.idCode.matches('^[A-Z0-9]{6}$');
+
+      allow update: if request.auth != null
+                    && request.auth.uid == uid
+                    && !('email' in request.resource.data.diff(resource.data).affectedKeys())
+                    && (
+                         !request.resource.data.diff(resource.data).affectedKeys()
+                              .hasAny(['uid', 'username', 'idCode'])
+                         ||
+                         (
+                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['idCode'])
+                           && !('idCode' in resource.data)
+                           && request.resource.data.idCode is string
+                           && request.resource.data.idCode.matches('^[A-Z0-9]{6}$')
+                         )
+                       );
+    }
+
+    match /idcodes/{idCode} {
+      allow read: if true;
+      allow create: if request.auth != null
+                    && request.resource.data.uid == request.auth.uid
+                    && idCode.matches('^[A-Z0-9]{6}$');
+      allow update, delete: if false;
+    }
+
+    match /contacts/{uid}/list/{friendUid} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == uid;
+    }
+
+    // NEW — backs the Block action on unknown-sender message requests
+    // (Section 6). Same ownership rule as /contacts, same document shape
+    // ({ blockedAt }) written by blockUser()/unblockUser() in firestore-api.js.
+    match /blocks/{uid}/list/{blockedUid} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == uid;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

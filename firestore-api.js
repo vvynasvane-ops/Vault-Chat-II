@@ -29,9 +29,26 @@ import { db } from "./firebase-config.js";
 export const ERROR_ID_CODE_TAKEN = "ID_CODE_TAKEN";
 const MAX_ID_CODE_ATTEMPTS = 6;
 
+// Alphanumeric ID codes (Section 1 upgrade): 6 characters drawn from an
+// unambiguous set (no 0/O/1/I/L) so codes are easy to read aloud and type,
+// but the space is ~2.2B codes instead of the old 6-digit space of 1M —
+// far fewer collisions as the user base grows. Always stored/compared
+// upper-case so "a3k9pq" and "A3K9PQ" are the same code.
+const ID_CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+const ID_CODE_LENGTH = 6;
+export const ID_CODE_PATTERN = /^[A-Z0-9]{6}$/;
+
 function randomIdCode() {
-  const n = Math.floor(Math.random() * 1_000_000);
-  return String(n).padStart(6, "0");
+  let out = "";
+  const bytes = crypto.getRandomValues(new Uint8Array(ID_CODE_LENGTH));
+  for (let i = 0; i < ID_CODE_LENGTH; i++) {
+    out += ID_CODE_ALPHABET[bytes[i] % ID_CODE_ALPHABET.length];
+  }
+  return out;
+}
+
+export function normalizeIdCode(raw) {
+  return (raw || "").trim().toUpperCase();
 }
 
 // ─── Account creation (mirrors createAccountAtomically) ──────────────────
@@ -68,7 +85,7 @@ export async function getProfile(uid) {
 }
 
 export async function searchByIdCode(idCode) {
-  const q = query(collection(db, "users"), where("idCode", "==", idCode.trim()), limit(1));
+  const q = query(collection(db, "users"), where("idCode", "==", normalizeIdCode(idCode)), limit(1));
   const snap = await getDocs(q);
   if (snap.empty) throw new Error("User not found");
   return snap.docs[0].data();
@@ -145,6 +162,26 @@ export async function getContactUids(myUid) {
 }
 
 // ─── Presence listener (mirrors listenToPresence) ────────────────────────
+
+// ─── Blocked senders (Section 6 — unknown-sender requests) ───────────────
+// Local-only would let a blocked stranger keep re-messaging after a device
+// switch, so blocks live in Firestore next to contacts: /blocks/{uid}/list/{blockedUid}.
+
+export async function blockUser(myUid, blockedUid) {
+  await setDoc(doc(db, "blocks", myUid, "list", blockedUid), { blockedAt: Date.now() });
+}
+
+export async function unblockUser(myUid, blockedUid) {
+  const { deleteDoc } = await import(
+    "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
+  );
+  await deleteDoc(doc(db, "blocks", myUid, "list", blockedUid));
+}
+
+export async function getBlockedUids(myUid) {
+  const snap = await getDocs(collection(db, "blocks", myUid, "list"));
+  return snap.docs.map((d) => d.id);
+}
 
 export function listenToProfile(uid, onChange, onError) {
   return onSnapshot(
