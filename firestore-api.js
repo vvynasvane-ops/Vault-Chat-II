@@ -84,6 +84,37 @@ export async function getProfile(uid) {
   return snap.data();
 }
 
+// Rebuilds a minimal /users/{uid} doc for an already-authenticated account
+// whose Firestore profile is missing (e.g. it was never fully written, or
+// was deleted separately from the Auth account). Used as a self-heal path
+// so a returning user isn't locked out just because their document is gone.
+// `cached` is the last-known local session data (see auth.js saveSession);
+// anything missing falls back to a safe default and ensureIdCode() assigns
+// a fresh ID code when one isn't already known.
+export async function recoverProfileFromCache(uid, cached = {}) {
+  const userRef = doc(db, "users", uid);
+  const snap = await getDoc(userRef);
+  if (snap.exists()) return snap.data(); // recovered/created concurrently elsewhere
+
+  const publicKeyBase64 = cached.publicKeyBase64 || "";
+  const profile = {
+    uid,
+    username: cached.username || `user_${uid.slice(0, 6)}`,
+    displayName: cached.displayName || cached.username || "User",
+    publicKeyBase64,
+    fcmToken: "",
+    createdAt: Date.now(),
+    lastSeen: Date.now(),
+    isOnline: true,
+  };
+
+  await setDoc(userRef, profile, { merge: true });
+
+  const idCode = cached.idCode || (await ensureIdCode(uid));
+  profile.idCode = idCode;
+  return profile;
+}
+
 export async function searchByIdCode(idCode) {
   const q = query(collection(db, "users"), where("idCode", "==", normalizeIdCode(idCode)), limit(1));
   const snap = await getDocs(q);
