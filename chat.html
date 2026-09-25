@@ -122,6 +122,8 @@
       <form id="message-form" class="message-form">
         <button type="button" id="btn-attach-media" class="btn-icon" title="Send photo/video">🖼</button>
         <button type="button" id="btn-attach-file" class="btn-icon" title="Send file">📎</button>
+        <button type="button" id="btn-emoji" class="btn-icon" title="Emoji">😊</button>
+        <button type="button" id="btn-gif" class="btn-icon" title="GIF">GIF</button>
         <input id="message-input" type="text" placeholder="Type an encrypted message…" autocomplete="off" />
         <button type="submit" class="btn-primary" disabled>Send</button>
       </form>
@@ -177,7 +179,14 @@
         <button class="btn-icon" data-close-dialog>✕</button>
       </header>
       <div class="dialog-body">
-        <label class="field-label">Username</label>
+        <label class="field-label">Display name <span class="field-hint-inline">(shown to your contacts)</span></label>
+        <input id="account-displayname-input" type="text" minlength="1" maxlength="40" placeholder="e.g. Veus" />
+        <p id="account-displayname-status" class="field-status"></p>
+        <button id="btn-save-displayname" class="btn-secondary full-width">Save display name</button>
+
+        <hr class="dialog-divider" />
+
+        <label class="field-label">Username <span class="field-hint-inline">(private handle, not shown to contacts)</span></label>
         <input id="account-username-input" type="text" minlength="3" maxlength="30" placeholder="e.g. veus_alpha" />
         <p id="account-username-status" class="field-status"></p>
         <button id="btn-save-username" class="btn-secondary full-width">Save username</button>
@@ -193,6 +202,35 @@
         <input id="account-confirm-password" type="password" placeholder="Confirm new password" autocomplete="new-password" />
         <p id="account-password-status" class="field-status"></p>
         <button id="btn-save-password" class="btn-secondary full-width">Save password</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Emoji picker -->
+  <div id="emoji-dialog" class="dialog-backdrop hidden">
+    <div class="dialog dialog-wide">
+      <header class="dialog-header">
+        <h3>Emoji</h3>
+        <button class="btn-icon" data-close-dialog>✕</button>
+      </header>
+      <div class="dialog-body">
+        <div id="emoji-category-tabs" class="emoji-tabs"></div>
+        <div id="emoji-grid" class="emoji-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GIF picker (Tenor search) -->
+  <div id="gif-dialog" class="dialog-backdrop hidden">
+    <div class="dialog dialog-wide">
+      <header class="dialog-header">
+        <h3>GIFs</h3>
+        <button class="btn-icon" data-close-dialog>✕</button>
+      </header>
+      <div class="dialog-body">
+        <input id="gif-search-input" type="text" placeholder="Search GIFs…" autocomplete="off" />
+        <p id="gif-status" class="field-status"></p>
+        <div id="gif-grid" class="gif-grid"></div>
       </div>
     </div>
   </div>
