@@ -84,35 +84,70 @@ export async function getProfile(uid) {
   return snap.data();
 }
 
-// Rebuilds a minimal /users/{uid} doc for an already-authenticated account
-// whose Firestore profile is missing (e.g. it was never fully written, or
-// was deleted separately from the Auth account). Used as a self-heal path
-// so a returning user isn't locked out just because their document is gone.
+// Rebuilds a /users/{uid} doc for an already-authenticated account whose
+// Firestore profile is missing (e.g. it was never fully written, or was
+// deleted separately from the Auth account). Used as a self-heal path so a
+// returning user isn't locked out just because their document is gone.
 // `cached` is the last-known local session data (see auth.js saveSession);
-// anything missing falls back to a safe default and ensureIdCode() assigns
-// a fresh ID code when one isn't already known.
+// anything missing falls back to a safe default.
+//
+// IMPORTANT: this must write uid/username/displayName/idCode/publicKeyBase64
+// /fcmToken all in the SAME create — firestore.rules' `allow create` on
+// /users/{uid} requires idCode to already be present and validly formatted
+// on that very write. Writing the doc first and patching in idCode after
+// (via a separate update) is rejected by the rules as a create with no
+// idCode, which is what previously made recovery fail outright. Reusing
+// createAccountAtomically() keeps this in the one atomic, rule-compliant
+// write and always mints a fresh code — deliberately not reusing any old
+// cached idCode, since we can't be sure it's still free or still theirs.
 export async function recoverProfileFromCache(uid, cached = {}) {
   const userRef = doc(db, "users", uid);
   const snap = await getDoc(userRef);
   if (snap.exists()) return snap.data(); // recovered/created concurrently elsewhere
 
-  const publicKeyBase64 = cached.publicKeyBase64 || "";
   const profile = {
     uid,
     username: cached.username || `user_${uid.slice(0, 6)}`,
     displayName: cached.displayName || cached.username || "User",
-    publicKeyBase64,
+    publicKeyBase64: cached.publicKeyBase64 || "",
     fcmToken: "",
     createdAt: Date.now(),
     lastSeen: Date.now(),
     isOnline: true,
   };
 
-  await setDoc(userRef, profile, { merge: true });
+  const idCode = await createAccountAtomically(profile);
+  return { ...profile, idCode };
+}
 
-  const idCode = cached.idCode || (await ensureIdCode(uid));
-  profile.idCode = idCode;
-  return profile;
+// Lets a signed-in user replace their own ID code on demand (e.g. a "Renew
+// ID code" button) — distinct from ensureIdCode(), which only backfills a
+// code when one is entirely missing and is a no-op otherwise. This always
+// mints and reserves a brand-new code and overwrites the old one. The old
+// code's /idcodes reservation is intentionally left in place (idcodes
+// entries are immutable per firestore.rules) — it simply stops resolving
+// to this user going forward since /users/{uid}.idCode has moved on.
+export async function renewIdCode(uid) {
+  for (let attempt = 1; attempt <= MAX_ID_CODE_ATTEMPTS; attempt++) {
+    const candidate = randomIdCode();
+    const userRef = doc(db, "users", uid);
+    const idCodeRef = doc(db, "idcodes", candidate);
+    try {
+      return await runTransaction(db, async (transaction) => {
+        const idCodeSnap = await transaction.get(idCodeRef);
+        if (idCodeSnap.exists()) {
+          throw new Error(ERROR_ID_CODE_TAKEN);
+        }
+        transaction.set(idCodeRef, { uid, reservedAt: Date.now() });
+        transaction.update(userRef, { idCode: candidate });
+        return candidate;
+      });
+    } catch (e) {
+      if (e.message === ERROR_ID_CODE_TAKEN && attempt < MAX_ID_CODE_ATTEMPTS) continue;
+      throw e;
+    }
+  }
+  throw new Error(ERROR_ID_CODE_TAKEN);
 }
 
 export async function searchByIdCode(idCode) {
