@@ -76,15 +76,28 @@ async function doLogin() {
   const cred = await signInWithEmailAndPassword(auth, email, password);
   const uid = cred.user.uid;
 
-  let profile;
-  try {
-    profile = await getProfile(uid);
-  } catch (e) {
-    await auth.signOut();
-    throw new Error("Couldn't load your profile — please try signing in again.");
-  }
+  let profile = await getProfile(uid).catch(() => null);
 
-  if (!profile.idCode) {
+  if (!profile) {
+    // The Auth account exists (password just verified above) but its
+    // Firestore profile doc doesn't — e.g. an old-system account whose
+    // /users doc was cleared out. Recreate it with a fresh ID code rather
+    // than locking the person out of an account they can still authenticate.
+    const publicKeyBase64 = await getOrCreatePublicKeyBase64();
+    const username = await uniqueUsernameFromGoogle({ email });
+    const newProfile = {
+      uid,
+      username,
+      displayName: username,
+      publicKeyBase64,
+      fcmToken: "",
+      createdAt: Date.now(),
+      lastSeen: Date.now(),
+      isOnline: true,
+    };
+    const idCode = await createAccountAtomically(newProfile);
+    profile = { ...newProfile, idCode };
+  } else if (!profile.idCode) {
     // Account predates the ID-code system - assign one now (same as Android).
     try {
       profile.idCode = await ensureIdCode(uid);
@@ -114,8 +127,38 @@ async function doRegister() {
     throw new Error("Password must be at least 6 characters");
   }
 
-  const cred = await createUserWithEmailAndPassword(auth, email, password);
-  const uid = cred.user.uid;
+  let uid;
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    uid = cred.user.uid;
+  } catch (err) {
+    if (err.code !== "auth/email-already-in-use") throw err;
+
+    // The Auth account for this email still exists — most likely one of the
+    // old accounts whose Firestore profile was deleted without deleting the
+    // Auth record itself. If the password just typed matches it, recover
+    // the account with a brand-new ID code instead of blocking sign-up.
+    // If it doesn't match, this is a genuinely different, still-active
+    // account and we shouldn't silently take it over.
+    let cred;
+    try {
+      cred = await signInWithEmailAndPassword(auth, email, password);
+    } catch (_) {
+      throw new Error("That email already has an account. Sign in instead, or use a different email.");
+    }
+    uid = cred.user.uid;
+
+    const existing = await getProfile(uid).catch(() => null);
+    if (existing) {
+      // Fully intact account after all — nothing to recover, just sign them in.
+      saveSession(uid, email, existing.username, existing.displayName, existing.idCode);
+      window.location.href = "chat.html";
+      return;
+    }
+    // Auth record survived but the profile doc is gone — fall through and
+    // provision a brand-new profile + ID code below, using the username and
+    // display name from this registration form.
+  }
 
   const publicKeyBase64 = await getOrCreatePublicKeyBase64();
 
