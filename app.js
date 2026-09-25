@@ -10,6 +10,7 @@ import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/
 import { auth } from "./firebase-config.js";
 import {
   getProfile,
+  recoverProfileFromCache,
   searchByIdCode,
   addContact,
   removeContact,
@@ -155,7 +156,33 @@ async function boot() {
   setupNotificationBanner();
   setupMobileMenu();
 
-  myProfile = await getProfile(myUid);
+  try {
+    myProfile = await getProfile(myUid);
+  } catch (e) {
+    // Existing, already-authenticated user whose Firestore /users/{uid} doc
+    // is missing (deleted, or never finished writing). Try to rebuild it
+    // from the locally cached session instead of dropping them — falling
+    // straight through to sign-out would lose a real account for a doc
+    // that can be safely recreated.
+    let cached = null;
+    try {
+      cached = JSON.parse(localStorage.getItem("vc_session") || "null");
+    } catch (_) {}
+
+    try {
+      myProfile = await recoverProfileFromCache(
+        myUid,
+        cached && cached.uid === myUid ? cached : {}
+      );
+    } catch (e2) {
+      alert("We couldn't load your account. Please sign in again.");
+      localStorage.removeItem("vc_session");
+      await signOut(auth);
+      window.location.href = "index.html";
+      return;
+    }
+  }
+
   els.myName.textContent = myProfile.displayName;
   els.myIdCode.textContent = formatIdCode(myProfile.idCode);
   renderAvatar(els.myAvatar, myProfile.profilePhotoBase64, myProfile.displayName);
@@ -175,12 +202,19 @@ async function boot() {
   await refreshRequests();
 
   startInbox(myUid, {
-    resolveSender: async (uid) => contacts.get(uid) || (await getProfile(uid)),
+    resolveSender: async (uid) =>
+      contacts.get(uid) ||
+      (await getProfile(uid).catch(() => ({ uid, displayName: "Unknown", idCode: "" }))),
     onText: (localMessage) => handleIncoming(localMessage),
     onMedia: (localMessage) => handleIncoming(localMessage),
     onKeyExchange: async (msg) => {
       // Refresh that contact's public key so future messages use the new one.
-      const profile = await getProfile(msg.senderId);
+      let profile;
+      try {
+        profile = await getProfile(msg.senderId);
+      } catch (_) {
+        return; // sender's doc is gone; nothing to refresh
+      }
       contacts.set(msg.senderId, profile);
       if (!contacts.has(msg.senderId)) return;
       const uids = await getContactUids(myUid);
@@ -968,11 +1002,13 @@ function formatIdCode(code) {
 }
 
 els.idCodeCopyBtn.addEventListener("click", async () => {
+  if (!myProfile) return;
   await navigator.clipboard.writeText(myProfile.idCode);
   flashToast("ID code copied");
 });
 
 els.idCodeShareBtn.addEventListener("click", async () => {
+  if (!myProfile) return;
   const text = `Add me using my ID code: ${myProfile.idCode}`;
   if (navigator.share) {
     try {
