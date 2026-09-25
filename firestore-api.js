@@ -200,6 +200,13 @@ export async function updatePublicKey(uid, publicKeyBase64) {
   await updateDoc(doc(db, "users", uid), { publicKeyBase64 });
 }
 
+// Username is display-only (not used for lookup — idCode is), so this is a
+// simple owner-checked field update. firestore.rules restricts it to a
+// username-only write of 3-30 chars, same bounds as at registration.
+export async function updateUsername(uid, username) {
+  await updateDoc(doc(db, "users", uid), { username });
+}
+
 // ─── Profile picture (Section 12 — Profile Pictures) ─────────────────────
 // Stored as a small compressed base64 JPEG directly on the user document —
 // no new cloud storage service is introduced, consistent with the app's
