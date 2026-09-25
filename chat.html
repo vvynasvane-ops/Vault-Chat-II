@@ -54,6 +54,7 @@
           </span>
         </div>
         <button id="btn-appearance" class="btn-icon" title="Appearance">🎨</button>
+        <button id="btn-account" class="btn-icon" title="Account settings">⚙️</button>
         <button id="btn-logout" class="btn-icon" title="Sign out">⏻</button>
       </div>
 
@@ -164,6 +165,34 @@
         <div id="font-color-grid" class="color-grid"></div>
 
         <button id="btn-reset-appearance" class="btn-secondary full-width">Reset text style to default</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Account settings — change username / password -->
+  <div id="account-dialog" class="dialog-backdrop hidden">
+    <div class="dialog">
+      <header class="dialog-header">
+        <h3>Account settings</h3>
+        <button class="btn-icon" data-close-dialog>✕</button>
+      </header>
+      <div class="dialog-body">
+        <label class="field-label">Username</label>
+        <input id="account-username-input" type="text" minlength="3" maxlength="30" placeholder="e.g. veus_alpha" />
+        <p id="account-username-status" class="field-status"></p>
+        <button id="btn-save-username" class="btn-secondary full-width">Save username</button>
+
+        <hr class="dialog-divider" />
+
+        <label class="field-label" id="account-password-heading">Change password</label>
+        <p id="account-password-hint" class="field-hint hidden">
+          You signed in with Google and don't have a password yet — set one below so you can also sign in with your email.
+        </p>
+        <input id="account-current-password" type="password" placeholder="Current password" autocomplete="current-password" />
+        <input id="account-new-password" type="password" placeholder="New password (min. 6 characters)" autocomplete="new-password" />
+        <input id="account-confirm-password" type="password" placeholder="Confirm new password" autocomplete="new-password" />
+        <p id="account-password-status" class="field-status"></p>
+        <button id="btn-save-password" class="btn-secondary full-width">Save password</button>
       </div>
     </div>
   </div>
