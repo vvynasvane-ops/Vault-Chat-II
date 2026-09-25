@@ -13,6 +13,7 @@ import {
   recoverProfileFromCache,
   renewIdCode,
   updateUsername,
+  updateDisplayName,
   searchByIdCode,
   addContact,
   removeContact,
@@ -54,6 +55,7 @@ import {
   MAX_MEDIA_BYTES,
 } from "./messaging.js";
 import { idb } from "./idb.js";
+import { getTrendingGifs, searchGifs, fetchGifBlob } from "./gif-picker.js";
 import {
   initAppearance,
   saveAppearance,
@@ -107,6 +109,15 @@ const els = {
   filePickerFiles: document.getElementById("file-picker-files"),
   btnAttachMedia: document.getElementById("btn-attach-media"),
   btnAttachFile: document.getElementById("btn-attach-file"),
+  btnEmoji: document.getElementById("btn-emoji"),
+  emojiDialog: document.getElementById("emoji-dialog"),
+  emojiTabs: document.getElementById("emoji-category-tabs"),
+  emojiGrid: document.getElementById("emoji-grid"),
+  btnGif: document.getElementById("btn-gif"),
+  gifDialog: document.getElementById("gif-dialog"),
+  gifSearchInput: document.getElementById("gif-search-input"),
+  gifStatus: document.getElementById("gif-status"),
+  gifGrid: document.getElementById("gif-grid"),
   msgContextMenu: document.getElementById("msg-context-menu"),
   idCodeCopyBtn: document.getElementById("btn-copy-idcode"),
   idCodeShareBtn: document.getElementById("btn-share-idcode"),
@@ -115,6 +126,9 @@ const els = {
   appearancePanel: document.getElementById("appearance-panel"),
   btnAccount: document.getElementById("btn-account"),
   accountDialog: document.getElementById("account-dialog"),
+  accountDisplayNameInput: document.getElementById("account-displayname-input"),
+  accountDisplayNameStatus: document.getElementById("account-displayname-status"),
+  btnSaveDisplayName: document.getElementById("btn-save-displayname"),
   accountUsernameInput: document.getElementById("account-username-input"),
   accountUsernameStatus: document.getElementById("account-username-status"),
   btnSaveUsername: document.getElementById("btn-save-username"),
@@ -164,6 +178,8 @@ async function boot() {
   await initAppearance();
   setupAppearancePanel();
   setupAccountDialog();
+  setupEmojiPicker();
+  setupGifPicker();
   await initNotifications();
   onUnreadChange(() => {
     refreshUnreadBadges();
@@ -926,21 +942,172 @@ els.btnAttachFile.addEventListener("click", () => els.filePickerFiles.click());
 els.filePickerImages.addEventListener("change", () => sendPickedFiles(els.filePickerImages.files));
 els.filePickerFiles.addEventListener("change", () => sendPickedFiles(els.filePickerFiles.files));
 
+async function sendOneMediaFile(file, previewPrefix = "📎") {
+  if (!activeContactUid) return false;
+  const profile = contacts.get(activeContactUid);
+  try {
+    const localMessage = await sendMediaFile(myUid, activeContactUid, profile.publicKeyBase64, file);
+    await renderMessage(localMessage);
+    bumpContactPreview(activeContactUid, `${previewPrefix} ${file.name}`, localMessage.timestamp);
+    scrollToBottom();
+    return true;
+  } catch (err) {
+    alert(err.message);
+    return false;
+  }
+}
+
 async function sendPickedFiles(fileList) {
   if (!activeContactUid || !fileList || fileList.length === 0) return;
-  const profile = contacts.get(activeContactUid);
   for (const file of Array.from(fileList)) {
-    try {
-      const localMessage = await sendMediaFile(myUid, activeContactUid, profile.publicKeyBase64, file);
-      await renderMessage(localMessage);
-      bumpContactPreview(activeContactUid, `📎 ${file.name}`, localMessage.timestamp);
-      scrollToBottom();
-    } catch (err) {
-      alert(err.message);
-    }
+    await sendOneMediaFile(file);
   }
   els.filePickerImages.value = "";
   els.filePickerFiles.value = "";
+}
+
+// Mobile keyboards (Gboard, SwiftKey, iOS) send GIFs and stickers picked
+// from the keyboard's own GIF/sticker tray as an image file attached to a
+// normal paste event (Android's "commit content" surfaces this way in
+// Chrome/WebView) rather than as text. Anything with image bytes in the
+// paste gets routed into the same encrypted media pipeline as an attached
+// file; plain text paste is left completely alone.
+els.messageInput.addEventListener("paste", async (e) => {
+  const files = Array.from(e.clipboardData?.files || []).filter((f) => f.type.startsWith("image/"));
+  if (files.length === 0) return;
+  e.preventDefault();
+  if (!activeContactUid) {
+    alert("Pick a contact first");
+    return;
+  }
+  for (const file of files) {
+    await sendOneMediaFile(file, "🖼");
+  }
+});
+
+// ─── Emoji + GIF pickers (Section 14) ────────────────────────────────────
+
+const EMOJI_CATEGORIES = [
+  ["😀", ["😀","😃","😄","😁","😆","😅","🤣","😂","🙂","🙃","😉","😊","😇","🥰","😍","🤩","😘","😗","😚","😙","😋","😛","😜","🤪","😝","🤑","🤗","🤭","🤫","🤔","🤐","🤨","😐","😑","😶","😏","😒","🙄","😬","🤥","😴","😪","🤤","😷","🤒","🤕","🤢","🤮","🥵","🥶","😵","🤯","🥳","😎","🤓","🧐","😡","😠","🥺","😢","😭","😱","😨","😰","😅","🤠","🥸"]],
+  ["👍", ["👍","👎","👊","✊","🤛","🤜","🤞","✌️","🤟","🤘","👌","🤌","🤏","👈","👉","👆","👇","☝️","✋","🤚","🖐️","🖖","👋","🤙","💪","🙏","👏","🙌","👐","🤝","✍️","💅"]],
+  ["❤️", ["❤️","🧡","💛","💚","💙","💜","🖤","🤍","🤎","💔","❣️","💕","💞","💓","💗","💖","💘","💝","💟","😻","💋"]],
+  ["🐶", ["🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨","🐯","🦁","🐮","🐷","🐸","🐵","🙈","🙉","🙊","🐔","🐧","🐦","🦆","🦅","🦉","🐺","🐗","🐴","🦄","🐝","🐛","🦋","🐌","🐞","🐢","🐍","🐙","🐬","🐳"]],
+  ["🍕", ["🍏","🍎","🍐","🍊","🍋","🍌","🍉","🍇","🍓","🍈","🍒","🍑","🥭","🍍","🥥","🥝","🍅","🍆","🥑","🥦","🌽","🥕","🍕","🍔","🍟","🌭","🍿","🧀","🥓","🥐","🍞","🥖","🥨","🧇","🍳","🍩","🍪","🎂","🍰","🧁","🍫","🍬","🍭","☕","🍵","🥤","🍺","🍻","🍷","🥂"]],
+  ["⚽", ["⚽","🏀","🏈","⚾","🎾","🏐","🏉","🎱","🏓","🏸","🥊","🥋","⛳","🎣","🎮","🎲","🎯","🎳","🎸","🎧","🎤","🎨","🎬","🚀","✈️","🚗","🚲","⏰","🎉","🎊","🎁","🏆","🥇"]],
+  ["💡", ["💡","🔥","⭐","🌟","✨","💫","🌈","☀️","⛅","🌙","☁️","⚡","❄️","💧","💯","✅","❌","❗","❓","💤","🔒","🔓","📌","📍","🔗","💬","💭","🕐"]],
+];
+
+function insertAtCursor(input, text) {
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  input.value = input.value.slice(0, start) + text + input.value.slice(end);
+  const cursor = start + text.length;
+  input.setSelectionRange(cursor, cursor);
+  input.focus();
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function setupEmojiPicker() {
+  let selected = 0;
+
+  function renderTabs() {
+    els.emojiTabs.innerHTML = "";
+    EMOJI_CATEGORIES.forEach(([icon], i) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "emoji-tab" + (i === selected ? " selected" : "");
+      btn.textContent = icon;
+      btn.addEventListener("click", () => {
+        selected = i;
+        renderTabs();
+        renderGrid();
+      });
+      els.emojiTabs.appendChild(btn);
+    });
+  }
+
+  function renderGrid() {
+    els.emojiGrid.innerHTML = "";
+    const [, emojis] = EMOJI_CATEGORIES[selected];
+    for (const emoji of emojis) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "emoji-cell";
+      btn.textContent = emoji;
+      btn.addEventListener("click", () => insertAtCursor(els.messageInput, emoji));
+      els.emojiGrid.appendChild(btn);
+    }
+  }
+
+  els.btnEmoji.addEventListener("click", () => {
+    renderTabs();
+    renderGrid();
+    openDialog(els.emojiDialog);
+  });
+}
+
+function setupGifPicker() {
+  let searchToken = 0;
+
+  function renderGifs(gifs) {
+    els.gifGrid.innerHTML = "";
+    if (gifs.length === 0) {
+      els.gifGrid.innerHTML = '<p class="gif-grid-empty">No GIFs found</p>';
+      return;
+    }
+    for (const gif of gifs) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "gif-cell";
+      btn.innerHTML = `<img src="${gif.previewUrl}" alt="${escapeHtml(gif.description)}" loading="lazy" />`;
+      btn.addEventListener("click", async () => {
+        if (!activeContactUid) {
+          alert("Pick a contact first");
+          return;
+        }
+        btn.classList.add("sending");
+        try {
+          const blob = await fetchGifBlob(gif.gifUrl);
+          const file = new File([blob], `${gif.id}.gif`, { type: blob.type || "image/gif" });
+          const ok = await sendOneMediaFile(file, "🎞");
+          if (ok) closeDialog(els.gifDialog);
+        } catch (e) {
+          alert("Couldn't send that GIF: " + e.message);
+        } finally {
+          btn.classList.remove("sending");
+        }
+      });
+      els.gifGrid.appendChild(btn);
+    }
+  }
+
+  async function load(query) {
+    const token = ++searchToken;
+    els.gifStatus.textContent = "Loading…";
+    els.gifStatus.classList.remove("error");
+    try {
+      const gifs = query ? await searchGifs(query) : await getTrendingGifs();
+      if (token !== searchToken) return; // a newer search superseded this one
+      els.gifStatus.textContent = "";
+      renderGifs(gifs);
+    } catch (e) {
+      if (token !== searchToken) return;
+      els.gifStatus.textContent = e.message;
+      els.gifStatus.classList.add("error");
+      els.gifGrid.innerHTML = "";
+    }
+  }
+
+  let debounceTimer;
+  els.gifSearchInput.addEventListener("input", () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => load(els.gifSearchInput.value.trim()), 350);
+  });
+
+  els.btnGif.addEventListener("click", () => {
+    openDialog(els.gifDialog);
+    if (!els.gifGrid.children.length) load("");
+  });
 }
 
 // Share-out round trip (Section 7): dropping a file onto the message log
@@ -1249,6 +1416,8 @@ function setupAccountDialog() {
   }
 
   els.btnAccount.addEventListener("click", () => {
+    els.accountDisplayNameInput.value = myProfile?.displayName || "";
+    setStatus(els.accountDisplayNameStatus, "");
     els.accountUsernameInput.value = myProfile?.username || "";
     setStatus(els.accountUsernameStatus, "");
     els.accountCurrentPassword.value = "";
@@ -1262,6 +1431,38 @@ function setupAccountDialog() {
     els.accountCurrentPassword.classList.toggle("hidden", !hasPassword);
 
     openDialog(els.accountDialog);
+  });
+
+  els.btnSaveDisplayName.addEventListener("click", async () => {
+    const displayName = els.accountDisplayNameInput.value.trim();
+    if (!displayName) {
+      setStatus(els.accountDisplayNameStatus, "Display name can't be empty", "error");
+      return;
+    }
+    if (displayName.length > 40) {
+      setStatus(els.accountDisplayNameStatus, "Keep it under 40 characters", "error");
+      return;
+    }
+    if (displayName === myProfile?.displayName) {
+      setStatus(els.accountDisplayNameStatus, "That's already your display name", "error");
+      return;
+    }
+    els.btnSaveDisplayName.disabled = true;
+    try {
+      await updateDisplayName(myUid, displayName);
+      myProfile.displayName = displayName;
+      // This is the name actually shown around the app — update it live
+      // instead of waiting for a reload.
+      els.myName.textContent = displayName;
+      renderAvatar(els.myAvatar, myProfile.profilePhotoBase64, displayName);
+      setStatus(els.accountDisplayNameStatus, "Display name updated", "success");
+      flashToast("Display name updated");
+    } catch (e) {
+      console.error("updateDisplayName failed:", e);
+      setStatus(els.accountDisplayNameStatus, "Couldn't update display name — try again", "error");
+    } finally {
+      els.btnSaveDisplayName.disabled = false;
+    }
   });
 
   els.btnSaveUsername.addEventListener("click", async () => {
@@ -1281,7 +1482,16 @@ function setupAccountDialog() {
       setStatus(els.accountUsernameStatus, "Username updated", "success");
       flashToast("Username updated");
     } catch (e) {
-      setStatus(els.accountUsernameStatus, "Couldn't update username — try again", "error");
+      console.error("updateUsername failed:", e);
+      // permission-denied here almost always means firestore.rules on the
+      // Firebase project hasn't been (re)deployed with the username-update
+      // rule yet — surface that directly instead of a generic message, so
+      // it's obvious this is a deploy step, not a code bug.
+      const msg =
+        e.code === "permission-denied"
+          ? "Update blocked by server rules — make sure the latest firestore.rules is deployed"
+          : "Couldn't update username — try again";
+      setStatus(els.accountUsernameStatus, msg, "error");
     } finally {
       els.btnSaveUsername.disabled = false;
     }
@@ -1307,6 +1517,11 @@ function setupAccountDialog() {
     }
 
     const user = auth.currentUser;
+    if (!user?.email) {
+      setStatus(els.accountPasswordStatus, "No email on this account — can't set a password", "error");
+      return;
+    }
+
     els.btnSavePassword.disabled = true;
     try {
       if (hasPassword) {
@@ -1327,11 +1542,16 @@ function setupAccountDialog() {
         els.accountPasswordHint.classList.add("hidden");
         els.accountCurrentPassword.classList.remove("hidden");
       }
+      // Refresh providerData in case it changed (linking a new provider) so
+      // the dialog is in the right mode next time it's opened, without
+      // needing a full reload.
+      await user.reload().catch(() => {});
       flashToast("Password saved");
       els.accountCurrentPassword.value = "";
       els.accountNewPassword.value = "";
       els.accountConfirmPassword.value = "";
     } catch (e) {
+      console.error("password update failed:", e);
       const msg =
         e.code === "auth/wrong-password" || e.code === "auth/invalid-credential"
           ? "Current password is incorrect"
@@ -1339,6 +1559,10 @@ function setupAccountDialog() {
           ? "Please sign out and back in, then try again"
           : e.code === "auth/weak-password"
           ? "Choose a stronger password"
+          : e.code === "auth/too-many-requests"
+          ? "Too many attempts — wait a bit and try again"
+          : e.code === "auth/credential-already-in-use" || e.code === "auth/email-already-in-use"
+          ? "That email is already linked to a different sign-in method"
           : "Couldn't update password — try again";
       setStatus(els.accountPasswordStatus, msg, "error");
     } finally {
