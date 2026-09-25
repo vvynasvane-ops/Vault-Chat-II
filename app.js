@@ -11,6 +11,7 @@ import { auth } from "./firebase-config.js";
 import {
   getProfile,
   recoverProfileFromCache,
+  renewIdCode,
   searchByIdCode,
   addContact,
   removeContact,
@@ -108,6 +109,7 @@ const els = {
   msgContextMenu: document.getElementById("msg-context-menu"),
   idCodeCopyBtn: document.getElementById("btn-copy-idcode"),
   idCodeShareBtn: document.getElementById("btn-share-idcode"),
+  idCodeRenewBtn: document.getElementById("btn-renew-idcode"),
   btnAppearance: document.getElementById("btn-appearance"),
   appearancePanel: document.getElementById("appearance-panel"),
   btnEncryptionInfo: document.getElementById("btn-encryption-info"),
@@ -1001,14 +1003,41 @@ function formatIdCode(code) {
   return `ID: ${code.slice(0, 3)} ${code.slice(3)}`;
 }
 
+// navigator.clipboard.writeText can silently reject (insecure context,
+// permission denied, iframe without the clipboard-write permission, etc).
+// Fall back to the old execCommand trick via a hidden textarea so "copy"
+// still works somewhere instead of quietly doing nothing. Returns whether
+// either path actually succeeded.
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (_) {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
 els.idCodeCopyBtn.addEventListener("click", async () => {
-  if (!myProfile) return;
-  await navigator.clipboard.writeText(myProfile.idCode);
-  flashToast("ID code copied");
+  if (!myProfile || !myProfile.idCode) return;
+  const ok = await copyText(myProfile.idCode);
+  flashToast(ok ? "ID code copied" : "Couldn't copy — long-press to select it instead");
 });
 
 els.idCodeShareBtn.addEventListener("click", async () => {
-  if (!myProfile) return;
+  if (!myProfile || !myProfile.idCode) return;
   const text = `Add me using my ID code: ${myProfile.idCode}`;
   if (navigator.share) {
     try {
@@ -1016,8 +1045,34 @@ els.idCodeShareBtn.addEventListener("click", async () => {
       return;
     } catch (_) {}
   }
-  await navigator.clipboard.writeText(text);
-  flashToast("Copied — paste it anywhere");
+  const ok = await copyText(text);
+  flashToast(ok ? "Copied — paste it anywhere" : "Couldn't copy — long-press to select it instead");
+});
+
+let renewingIdCode = false;
+els.idCodeRenewBtn.addEventListener("click", async () => {
+  if (!myProfile || renewingIdCode) return;
+  const ok = confirm(
+    "Get a new ID code? Existing contacts stay connected — only people who haven't added you yet will need the new code."
+  );
+  if (!ok) return;
+
+  renewingIdCode = true;
+  els.idCodeRenewBtn.disabled = true;
+  const previous = els.idCodeRenewBtn.textContent;
+  els.idCodeRenewBtn.textContent = "…";
+  try {
+    const newCode = await renewIdCode(myUid);
+    myProfile.idCode = newCode;
+    els.myIdCode.textContent = formatIdCode(newCode);
+    flashToast("New ID code ready");
+  } catch (e) {
+    flashToast("Couldn't renew ID code — try again");
+  } finally {
+    renewingIdCode = false;
+    els.idCodeRenewBtn.disabled = false;
+    els.idCodeRenewBtn.textContent = previous;
+  }
 });
 
 // ─── Chat menu: Encryption Info / Clear Chat / View Media (Section 3) ──
