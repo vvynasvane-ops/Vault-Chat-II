@@ -207,6 +207,15 @@ export async function updateUsername(uid, username) {
   await updateDoc(doc(db, "users", uid), { username });
 }
 
+// displayName is the name actually shown to contacts (sidebar, chat header,
+// contact rows) — distinct from `username`, which is just an internal
+// handle. Not gated by the create-only idCode/username rules, so any other
+// profile field (this one included) writes freely as long as the owner is
+// the one writing it.
+export async function updateDisplayName(uid, displayName) {
+  await updateDoc(doc(db, "users", uid), { displayName });
+}
+
 // ─── Profile picture (Section 12 — Profile Pictures) ─────────────────────
 // Stored as a small compressed base64 JPEG directly on the user document —
 // no new cloud storage service is introduced, consistent with the app's
