@@ -6,12 +6,13 @@
 // (X25519/AES-256-GCM), idb (local persistence), and appearance
 // (theme/fonts/wallpapers).
 
-import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { onAuthStateChanged, signOut, EmailAuthProvider, reauthenticateWithCredential, updatePassword, linkWithCredential } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { auth } from "./firebase-config.js";
 import {
   getProfile,
   recoverProfileFromCache,
   renewIdCode,
+  updateUsername,
   searchByIdCode,
   addContact,
   removeContact,
@@ -112,6 +113,18 @@ const els = {
   idCodeRenewBtn: document.getElementById("btn-renew-idcode"),
   btnAppearance: document.getElementById("btn-appearance"),
   appearancePanel: document.getElementById("appearance-panel"),
+  btnAccount: document.getElementById("btn-account"),
+  accountDialog: document.getElementById("account-dialog"),
+  accountUsernameInput: document.getElementById("account-username-input"),
+  accountUsernameStatus: document.getElementById("account-username-status"),
+  btnSaveUsername: document.getElementById("btn-save-username"),
+  accountPasswordHeading: document.getElementById("account-password-heading"),
+  accountPasswordHint: document.getElementById("account-password-hint"),
+  accountCurrentPassword: document.getElementById("account-current-password"),
+  accountNewPassword: document.getElementById("account-new-password"),
+  accountConfirmPassword: document.getElementById("account-confirm-password"),
+  accountPasswordStatus: document.getElementById("account-password-status"),
+  btnSavePassword: document.getElementById("btn-save-password"),
   btnEncryptionInfo: document.getElementById("btn-encryption-info"),
   encryptionDialog: document.getElementById("encryption-dialog"),
   btnClearChat: document.getElementById("btn-clear-chat"),
@@ -150,6 +163,7 @@ onAuthStateChanged(auth, async (user) => {
 async function boot() {
   await initAppearance();
   setupAppearancePanel();
+  setupAccountDialog();
   await initNotifications();
   onUnreadChange(() => {
     refreshUnreadBadges();
@@ -1219,6 +1233,118 @@ function setupAppearancePanel() {
     });
   }
   reflect();
+}
+
+// ─── Account settings: username + password (Section 13) ────────────────
+
+function setupAccountDialog() {
+  function hasPasswordProvider() {
+    return (auth.currentUser?.providerData || []).some((p) => p.providerId === "password");
+  }
+
+  function setStatus(el, text, kind) {
+    el.textContent = text || "";
+    el.classList.remove("error", "success");
+    if (kind) el.classList.add(kind);
+  }
+
+  els.btnAccount.addEventListener("click", () => {
+    els.accountUsernameInput.value = myProfile?.username || "";
+    setStatus(els.accountUsernameStatus, "");
+    els.accountCurrentPassword.value = "";
+    els.accountNewPassword.value = "";
+    els.accountConfirmPassword.value = "";
+    setStatus(els.accountPasswordStatus, "");
+
+    const hasPassword = hasPasswordProvider();
+    els.accountPasswordHeading.textContent = hasPassword ? "Change password" : "Set a password";
+    els.accountPasswordHint.classList.toggle("hidden", hasPassword);
+    els.accountCurrentPassword.classList.toggle("hidden", !hasPassword);
+
+    openDialog(els.accountDialog);
+  });
+
+  els.btnSaveUsername.addEventListener("click", async () => {
+    const username = els.accountUsernameInput.value.trim();
+    if (username.length < 3 || username.length > 30) {
+      setStatus(els.accountUsernameStatus, "Username must be 3–30 characters", "error");
+      return;
+    }
+    if (username === myProfile?.username) {
+      setStatus(els.accountUsernameStatus, "That's already your username", "error");
+      return;
+    }
+    els.btnSaveUsername.disabled = true;
+    try {
+      await updateUsername(myUid, username);
+      myProfile.username = username;
+      setStatus(els.accountUsernameStatus, "Username updated", "success");
+      flashToast("Username updated");
+    } catch (e) {
+      setStatus(els.accountUsernameStatus, "Couldn't update username — try again", "error");
+    } finally {
+      els.btnSaveUsername.disabled = false;
+    }
+  });
+
+  els.btnSavePassword.addEventListener("click", async () => {
+    const current = els.accountCurrentPassword.value;
+    const next = els.accountNewPassword.value;
+    const confirm = els.accountConfirmPassword.value;
+    const hasPassword = hasPasswordProvider();
+
+    if (hasPassword && !current) {
+      setStatus(els.accountPasswordStatus, "Enter your current password", "error");
+      return;
+    }
+    if (next.length < 6) {
+      setStatus(els.accountPasswordStatus, "New password must be at least 6 characters", "error");
+      return;
+    }
+    if (next !== confirm) {
+      setStatus(els.accountPasswordStatus, "Passwords don't match", "error");
+      return;
+    }
+
+    const user = auth.currentUser;
+    els.btnSavePassword.disabled = true;
+    try {
+      if (hasPassword) {
+        // Firebase requires a recent sign-in for this — reauthenticate with
+        // the current password first, since we have no other credential on
+        // hand (matches how doLogin() only ever verifies via Auth itself).
+        const cred = EmailAuthProvider.credential(user.email, current);
+        await reauthenticateWithCredential(user, cred);
+        await updatePassword(user, next);
+        setStatus(els.accountPasswordStatus, "Password updated", "success");
+      } else {
+        // Google-only account — add an email/password credential rather
+        // than overwrite one that doesn't exist yet.
+        const cred = EmailAuthProvider.credential(user.email, next);
+        await linkWithCredential(user, cred);
+        setStatus(els.accountPasswordStatus, "Password set — you can now sign in with your email too", "success");
+        els.accountPasswordHeading.textContent = "Change password";
+        els.accountPasswordHint.classList.add("hidden");
+        els.accountCurrentPassword.classList.remove("hidden");
+      }
+      flashToast("Password saved");
+      els.accountCurrentPassword.value = "";
+      els.accountNewPassword.value = "";
+      els.accountConfirmPassword.value = "";
+    } catch (e) {
+      const msg =
+        e.code === "auth/wrong-password" || e.code === "auth/invalid-credential"
+          ? "Current password is incorrect"
+          : e.code === "auth/requires-recent-login"
+          ? "Please sign out and back in, then try again"
+          : e.code === "auth/weak-password"
+          ? "Choose a stronger password"
+          : "Couldn't update password — try again";
+      setStatus(els.accountPasswordStatus, msg, "error");
+    } finally {
+      els.btnSavePassword.disabled = false;
+    }
+  });
 }
 
 // ─── Profile picture (Section 12) ──────────────────────────────────────
