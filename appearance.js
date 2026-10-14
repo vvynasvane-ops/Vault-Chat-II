@@ -48,9 +48,47 @@ const DEFAULTS = {
   fontSizePct: 100, // 85–135
   fontColor: "", // "" = no override, keep each screen's own color
   accent: "", // "" = theme default; otherwise "#rrggbb" from the RGB mixer
+  // ── Chat Studio ──
+  bubbleMine: "", // "" = theme default; otherwise "#rrggbb" for your bubbles
+  bubbleTheirs: "", // "" = theme default; otherwise "#rrggbb" for their bubbles
+  chatTint: "", // "" = none; otherwise "#rrggbb" wash over the chat area
+  bubbleShape: "shard", // see BUBBLE_SHAPES
+  bubbleFx: "none", // see BUBBLE_FX
+  scrim: "", // "" = auto-dim wallpapers for readability; otherwise 0–90 (%)
+  chatPreset: "", // id of the last preset applied (highlight only)
 };
 
+export const BUBBLE_SHAPES = [
+  { id: "shard", name: "Shard" },
+  { id: "round", name: "Round" },
+  { id: "cloud", name: "Cloud" },
+  { id: "leaf", name: "Leaf" },
+  { id: "sharp", name: "Sharp" },
+];
+
+export const BUBBLE_FX = [
+  { id: "none", name: "Plain" },
+  { id: "glow", name: "Glow" },
+  { id: "shimmer", name: "Shimmer" },
+];
+
+// One tap re-themes the whole chat: your bubbles, theirs, the wash behind
+// them, the shape, the effect and the app accent.
+export const CHAT_PRESETS = [
+  { id: "default", name: "♻️ Default", mine: "", theirs: "", tint: "", accent: "", shape: "shard", fx: "none" },
+  { id: "neon-dusk", name: "🌌 Neon Dusk", mine: "#7c5cff", theirs: "#1b1640", tint: "#5b3fd6", accent: "#a78bff", shape: "shard", fx: "shimmer" },
+  { id: "sakura", name: "🌸 Sakura", mine: "#ec5f8f", theirs: "#3a1c2c", tint: "#d6457a", accent: "#ff8fb3", shape: "leaf", fx: "none" },
+  { id: "deep-ocean", name: "🌊 Deep Ocean", mine: "#0e8fb8", theirs: "#0a2433", tint: "#0b6e96", accent: "#3fd4ff", shape: "cloud", fx: "glow" },
+  { id: "matrix", name: "🟩 Matrix", mine: "#17a84f", theirs: "#07150c", tint: "#11803a", accent: "#39ff7a", shape: "sharp", fx: "glow" },
+  { id: "solar-flare", name: "🔥 Solar Flare", mine: "#ff7a1a", theirs: "#301d0e", tint: "#c45500", accent: "#ffb15c", shape: "round", fx: "glow" },
+  { id: "glacier", name: "🧊 Glacier", mine: "#3f8fe8", theirs: "#e8f2ff", tint: "#5aa8ff", accent: "#3f8fe8", shape: "round", fx: "none" },
+  { id: "royal-gold", name: "👑 Royal Gold", mine: "#b8862a", theirs: "#26200f", tint: "#8a6414", accent: "#e3b04b", shape: "leaf", fx: "shimmer" },
+  { id: "ink-paper", name: "🖋️ Ink & Paper", mine: "#2c2c36", theirs: "#f2efe6", tint: "#8a8a96", accent: "", shape: "sharp", fx: "none" },
+];
+
 let cache = null;
+let lastSettings = null;
+let wallLum = 0.5; // measured brightness (0–1) of the current chat wallpaper
 
 export async function loadAppearance() {
   if (cache) return cache;
@@ -61,8 +99,13 @@ export async function loadAppearance() {
 
 export async function saveAppearance(partial) {
   cache = { ...(cache || DEFAULTS), ...partial };
-  await idb.put("settings", cache, SETTINGS_KEY);
+  // Apply first so the UI never waits on (or breaks because of) storage.
   applyAppearance(cache);
+  try {
+    await idb.put("settings", cache, SETTINGS_KEY);
+  } catch (err) {
+    console.warn("Could not persist appearance settings:", err);
+  }
   return cache;
 }
 
@@ -82,12 +125,18 @@ export async function resetAppearanceText() {
 export function applyAppearance(settings) {
   const root = document.documentElement;
   root.dataset.theme = settings.theme;
-  root.style.setProperty("--user-font-family", FONT_FAMILIES[settings.fontFamily] || FONT_FAMILIES.Default);
+  const fam = FONT_FAMILIES[settings.fontFamily] || FONT_FAMILIES.Default;
+  // In Ancient mode the stock (Rajdhani) choices follow the era's own typeface.
+  const eraFont = root.dataset.era === "ancient" && fam.includes("Rajdhani");
+  root.style.setProperty("--user-font-family", eraFont ? "var(--font-body)" : fam);
   root.style.setProperty("--user-font-weight", String(FONT_WEIGHTS[settings.fontWeight] ?? 400));
   root.style.setProperty("--user-font-scale", String(Math.max(0.85, Math.min(1.35, settings.fontSizePct / 100))));
   root.style.setProperty("--user-font-color", settings.fontColor || "inherit");
   root.classList.toggle("font-color-override", !!settings.fontColor);
   applyAccent(settings.accent, settings.theme);
+  lastSettings = settings;
+  applyChatTheme(settings);
+  updateScrim();
 }
 
 // ─── Accent colour (RGB mixer) ───────────────────────────────────────────
@@ -136,6 +185,121 @@ export async function initAppearance() {
   return settings;
 }
 
+
+// ─── Chat Studio: bubble colours, tint, shape, effect, readability ───────
+// Messages must stay legible on ANY wallpaper, so bubbles always get an
+// (almost) opaque backing and their text colour is chosen by contrast math,
+// never by guesswork. The wallpaper itself is dimmed/lightened automatically
+// from its measured brightness unless the person sets the dimming manually.
+
+function relLum([r, g, b]) {
+  const f = (c) => {
+    c /= 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+
+// White or near-black, whichever has the higher contrast on this colour.
+function textOn(rgb) {
+  const L = relLum(rgb);
+  return 1.05 / (L + 0.05) >= (L + 0.05) / 0.054 ? "#ffffff" : "#0b0d14";
+}
+
+const scale = (rgb, k) => rgb.map((c) => Math.max(0, Math.min(255, Math.round(c * k))));
+const toward = (rgb, to, t) => rgb.map((c, i) => Math.round(c + (to[i] - c) * t));
+const CHAT_VARS = [
+  "--bubble-mine-1", "--bubble-mine-2", "--bubble-mine-text", "--bubble-mine-glow",
+  "--bubble-theirs-bg", "--bubble-theirs-text", "--chat-tint-rgb", "--wp-rgb",
+];
+
+export function applyChatTheme(settings) {
+  const root = document.documentElement;
+  const light = settings.theme === "light";
+
+  // Your bubbles: explicit colour > derived from the accent > theme default
+  const custom = parseHex(settings.bubbleMine);
+  const fromAccent = parseHex(settings.accent);
+  const mine = custom || fromAccent;
+  if (mine) {
+    const c1 = custom ? mine : scale(mine, 0.82);
+    const c2 = custom ? scale(mine, 0.55) : scale(mine, 0.5);
+    const mid = scale(mine, custom ? 0.78 : 0.66);
+    root.style.setProperty("--bubble-mine-1", `rgb(${c1.join(",")})`);
+    root.style.setProperty("--bubble-mine-2", `rgb(${c2.join(",")})`);
+    root.style.setProperty("--bubble-mine-text", textOn(mid));
+    root.style.setProperty("--bubble-mine-glow", `rgba(${mine.join(",")}, 0.55)`);
+    root.classList.add("has-bubble-mine");
+  } else {
+    ["--bubble-mine-1", "--bubble-mine-2", "--bubble-mine-text", "--bubble-mine-glow"].forEach((v) => root.style.removeProperty(v));
+    root.classList.remove("has-bubble-mine");
+  }
+
+  // Their bubbles
+  const theirs = parseHex(settings.bubbleTheirs);
+  if (theirs) {
+    root.style.setProperty("--bubble-theirs-bg", `rgba(${theirs.join(",")}, 0.95)`);
+    root.style.setProperty("--bubble-theirs-text", textOn(theirs));
+    root.classList.add("has-bubble-theirs");
+  } else {
+    root.style.removeProperty("--bubble-theirs-bg");
+    root.style.removeProperty("--bubble-theirs-text");
+    root.classList.remove("has-bubble-theirs");
+  }
+
+  // Chat tint (also colours the wallpaper dimming layer)
+  const tint = parseHex(settings.chatTint);
+  if (tint) {
+    root.style.setProperty("--chat-tint-rgb", tint.join(", "));
+    root.style.setProperty("--wp-rgb", (light ? toward(tint, [255, 255, 255], 0.88) : scale(tint, 0.16)).join(", "));
+    root.classList.add("has-chat-tint");
+  } else {
+    root.style.removeProperty("--chat-tint-rgb");
+    root.style.removeProperty("--wp-rgb");
+    root.classList.remove("has-chat-tint");
+  }
+
+  root.dataset.bubble = BUBBLE_SHAPES.some((x) => x.id === settings.bubbleShape) ? settings.bubbleShape : "shard";
+  root.dataset.bubbleFx = BUBBLE_FX.some((x) => x.id === settings.bubbleFx) ? settings.bubbleFx : "none";
+}
+
+// Dimming layer strength over the chat wallpaper (0–0.9)
+export function updateScrim() {
+  const root = document.documentElement;
+  const s = lastSettings || DEFAULTS;
+  const manual = s.scrim === "" || s.scrim === null || s.scrim === undefined ? NaN : Number(s.scrim);
+  let v;
+  if (Number.isFinite(manual)) {
+    v = manual / 100;
+  } else if (s.theme === "light") {
+    v = 0.45 + (1 - wallLum) * 0.4; // dark photo on a light UI → lighten more
+  } else {
+    v = 0.38 + wallLum * 0.47; // bright photo on a dark UI → darken more
+  }
+  root.style.setProperty("--wp-scrim", String(Math.max(0, Math.min(0.9, v)).toFixed(2)));
+}
+
+async function measureLuminance(blob) {
+  try {
+    const bmp = await createImageBitmap(blob);
+    const c = document.createElement("canvas");
+    c.width = c.height = 24;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(bmp, 0, 0, 24, 24);
+    if (bmp.close) bmp.close();
+    const d = ctx.getImageData(0, 0, 24, 24).data;
+    const all = [];
+    for (let i = 0; i < d.length; i += 4) all.push(relLum([d[i], d[i + 1], d[i + 2]]));
+    all.sort((a, b) => a - b);
+    const mean = all.reduce((a, b) => a + b, 0) / all.length;
+    const p85 = all[Math.floor(all.length * 0.85)];
+    // Bright pockets matter as much as the average for text legibility
+    return Math.max(0, Math.min(1, mean * 0.6 + p85 * 0.4));
+  } catch (_) {
+    return 0.5;
+  }
+}
+
 // ─── Wallpapers (Section 8 — per chat, Section 9 — home screen) ──────────
 // Stabilized storage: the picked image is copied into IndexedDB (this app's
 // own private storage) rather than only holding a reference to the original
@@ -155,8 +319,15 @@ export async function applyWallpaper(key, targetEl) {
     const blob = await idb.get("wallpapers", key);
     if (blob) {
       const url = URL.createObjectURL(blob);
+      const prev = targetEl._wpUrl;
       targetEl.style.backgroundImage = `url(${url})`;
       targetEl.classList.add("has-wallpaper");
+      targetEl._wpUrl = url;
+      if (prev) setTimeout(() => URL.revokeObjectURL(prev), 1000); // don't leak old images
+      if (targetEl.classList.contains("message-log")) {
+        wallLum = await measureLuminance(blob);
+        updateScrim();
+      }
       return true;
     }
   } catch (_) {
@@ -166,6 +337,14 @@ export async function applyWallpaper(key, targetEl) {
   }
   targetEl.style.backgroundImage = "";
   targetEl.classList.remove("has-wallpaper");
+  if (targetEl._wpUrl) {
+    URL.revokeObjectURL(targetEl._wpUrl);
+    targetEl._wpUrl = null;
+  }
+  if (targetEl.classList.contains("message-log")) {
+    wallLum = 0.5;
+    updateScrim();
+  }
   return false;
 }
 

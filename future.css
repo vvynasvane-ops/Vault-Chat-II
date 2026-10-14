@@ -1,5 +1,6 @@
 /* VaultChatt II — "Year 7026" theme layer. Loaded after style.css; overrides tokens + components only. */
 @import url("https://fonts.googleapis.com/css2?family=Michroma&family=Exo+2:wght@300;400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=EB+Garamond:wght@400;500;600;700&display=swap");
 
 :root {
   --bg-void: #05040d;
@@ -223,14 +224,257 @@ input:focus, textarea:focus, .select-input:focus {
 .rgb-slider::-moz-range-thumb {
   width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 2px solid var(--cyan); box-shadow: 0 0 10px var(--cyan-glow);
 }
-.rgb-slider.rgb-r { background: linear-gradient(90deg, #000, #f00); }
-.rgb-slider.rgb-g { background: linear-gradient(90deg, #000, #0f0); }
-.rgb-slider.rgb-b { background: linear-gradient(90deg, #000, #00f); }
+.rgb-slider.rgb-r { background: linear-gradient(90deg, #000, #f00) !important; border-radius: 999px !important; height: 10px; }
+.rgb-slider.rgb-g { background: linear-gradient(90deg, #000, #0f0) !important; border-radius: 999px !important; height: 10px; }
+.rgb-slider.rgb-b { background: linear-gradient(90deg, #000, #00f) !important; border-radius: 999px !important; height: 10px; }
 
-/* Accent also tints your own chat bubbles */
-html.has-accent .bubble.mine {
-  border-color: rgba(var(--accent-rgb), .6);
-  background: linear-gradient(135deg, rgba(var(--accent-rgb), .5), rgba(var(--accent-rgb), .16));
-  box-shadow: 0 10px 30px -12px rgba(var(--accent-rgb), .6), 0 0 0 1px rgba(255,255,255,.05) inset;
-}
 html.has-accent * { scrollbar-color: var(--cyan) transparent; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TIME TRAVEL — era button + warp, and ANCIENT MODE (≈ 2974 BCE)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.era-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: calc(100% - 28px); margin: 10px 14px 0; padding: 10px 12px;
+  font-family: var(--font-display); font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--text-primary); cursor: pointer;
+  background: linear-gradient(120deg, rgba(167,139,255,.2), rgba(111,242,220,.12));
+  border: 1px solid var(--border); border-radius: 10px 2px 10px 2px;
+  transition: box-shadow .2s, transform .15s, background .3s;
+}
+.era-btn:hover { box-shadow: 0 0 24px -4px var(--plasma-glow); }
+.era-btn:active { transform: scale(.97); }
+.dialog .era-btn { width: 100%; margin: 0; }
+.era-floating { position: fixed; top: max(12px, env(safe-area-inset-top, 0px)); right: 12px; width: auto; margin: 0; z-index: 30; }
+
+.era-warp {
+  position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  background: radial-gradient(circle at 50% 50%, #120a2e 0%, #02010a 75%);
+  color: #fff; opacity: 1; transition: opacity .5s ease; pointer-events: all; overflow: hidden;
+}
+.era-warp.to-ancient { background: radial-gradient(circle at 50% 50%, #3a2508 0%, #0b0702 75%); }
+.era-warp.out { opacity: 0; pointer-events: none; }
+.era-warp-rings {
+  position: absolute; left: 50%; top: 50%; width: 140vmax; height: 140vmax; transform: translate(-50%, -50%);
+  background: repeating-radial-gradient(circle, transparent 0 5vmax, rgba(167,139,255,.35) 5vmax 5.3vmax);
+  animation: era-tunnel 1.2s linear infinite; opacity: .8;
+}
+.era-warp.to-ancient .era-warp-rings { background: repeating-radial-gradient(circle, transparent 0 5vmax, rgba(227,176,75,.4) 5vmax 5.3vmax); }
+.era-warp.to-future .era-warp-rings { animation-direction: reverse; }
+@keyframes era-tunnel { from { transform: translate(-50%, -50%) scale(.55); } to { transform: translate(-50%, -50%) scale(1.15); } }
+.era-warp-year {
+  position: relative; font-family: var(--font-display); font-size: clamp(38px, 11vw, 96px); letter-spacing: .08em;
+  text-shadow: 0 0 40px var(--plasma-glow, rgba(167,139,255,.6)); font-variant-numeric: tabular-nums;
+}
+.era-warp.to-ancient .era-warp-year { color: #f2cf8e; text-shadow: 0 0 40px rgba(227,176,75,.7); }
+.era-warp-sub { position: relative; font-size: 14px; letter-spacing: .2em; text-transform: uppercase; opacity: .75; text-align: center; padding: 0 20px; }
+@media (prefers-reduced-motion: reduce) { .era-warp-rings { animation: none; } }
+
+/* ── Ancient palette (night in the temple) ─────────────────────────── */
+:root[data-era="ancient"] {
+  --bg-void: #15100a; --bg-panel: rgba(36, 27, 16, .84); --bg-panel-raised: rgba(58, 43, 24, .92);
+  --cyan: #e3b04b; --cyan-dim: #a87a2b; --cyan-glow: rgba(227, 176, 75, .36);
+  --plasma: #c4623a; --plasma-glow: rgba(196, 98, 58, .4); --ember: #f2cf8e;
+  --text-primary: #f4e7c8; --text-dim: #b09a6e; --danger: #e0584a; --online: #9bc46e; --offline: #5b4a30;
+  --border: rgba(227, 176, 75, .3); --radius: 4px;
+  --font-display: "Cinzel", "Trajan Pro", Georgia, serif;
+  --font-body: "EB Garamond", Georgia, "Times New Roman", serif;
+  --chamfer: none; --glass: blur(6px) saturate(1.1);
+}
+/* Papyrus by day */
+:root[data-era="ancient"][data-theme="light"] {
+  --bg-void: #e9d8a8; --bg-panel: rgba(250, 240, 214, .88); --bg-panel-raised: rgba(238, 221, 178, .94);
+  --cyan: #8a5a12; --cyan-dim: #6b440c; --cyan-glow: rgba(138, 90, 18, .22);
+  --plasma: #a8432a; --plasma-glow: rgba(168, 67, 42, .28); --ember: #b8741a;
+  --text-primary: #2f2210; --text-dim: #7a6540; --danger: #b3362b; --online: #4f8a2c; --offline: #b9a77a;
+  --border: rgba(110, 72, 20, .32);
+}
+html[data-era="ancient"] body { font-size: calc(17px * var(--user-font-scale, 1)); }
+
+/* Sky, sun disc and the river — replaces the aurora */
+:root[data-era="ancient"] .hex-field {
+  background:
+    radial-gradient(circle at 82% 14%, rgba(255, 214, 120, .6) 0 4.5vmax, rgba(255, 190, 80, .2) 5vmax, transparent 28vmax),
+    linear-gradient(180deg, transparent 60%, rgba(20, 12, 4, .55) 100%),
+    radial-gradient(70vmax 40vmax at 8% 105%, rgba(60, 100, 150, .32), transparent 60%),
+    repeating-linear-gradient(0deg, rgba(227, 176, 75, .05) 0 1px, transparent 1px 38px),
+    repeating-linear-gradient(90deg, rgba(227, 176, 75, .04) 0 1px, transparent 1px 38px);
+  background-size: auto; filter: none; animation: ancient-sun 60s ease-in-out infinite alternate;
+}
+@keyframes ancient-sun { to { background-position: -4% 3%, 0 0, 3% 0, 0 0, 0 0; } }
+:root[data-era="ancient"] .scanline {
+  background: repeating-linear-gradient(45deg, rgba(0, 0, 0, .06) 0 1px, transparent 1px 4px);
+  mix-blend-mode: multiply; opacity: .5; animation: none;
+}
+@media (prefers-reduced-motion: reduce) { :root[data-era="ancient"] .hex-field { animation: none; } }
+
+/* Carved stone: square corners, no sci-fi chamfers or glass */
+:root[data-era="ancient"] .auth-card, :root[data-era="ancient"] .dialog {
+  border: 2px solid var(--border); border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .4) inset, 0 24px 60px -24px #000, 0 0 0 4px rgba(227, 176, 75, .07);
+}
+:root[data-era="ancient"] .auth-card::before, :root[data-era="ancient"] .dialog::before { display: none; }
+:root[data-era="ancient"] .dropdown-menu, :root[data-era="ancient"] .ctx-menu {
+  border-radius: 3px; border: 1px solid var(--border); box-shadow: 0 16px 40px -18px #000;
+}
+:root[data-era="ancient"] .dropdown-item:hover, :root[data-era="ancient"] .ctx-item:hover { background: linear-gradient(90deg, rgba(227, 176, 75, .22), transparent); }
+:root[data-era="ancient"] .dialog-backdrop { background: radial-gradient(circle at 50% 40%, rgba(70, 44, 12, .55), rgba(10, 6, 2, .85)); }
+:root[data-era="ancient"] .toast { border-radius: 4px; border-color: var(--cyan); box-shadow: 0 0 24px -8px var(--cyan-glow); }
+
+/* A band of repeating glyph-notches under headers */
+:root[data-era="ancient"] .chat-header, :root[data-era="ancient"] .dialog-header {
+  background-image: repeating-linear-gradient(90deg, rgba(227, 176, 75, .6) 0 8px, transparent 8px 14px);
+  background-size: 100% 3px; background-repeat: no-repeat; background-position: 0 100%;
+}
+
+:root[data-era="ancient"] h1, :root[data-era="ancient"] h2, :root[data-era="ancient"] h3,
+:root[data-era="ancient"] .brand h1, :root[data-era="ancient"] .chat-with-name,
+:root[data-era="ancient"] .dialog-header h3, :root[data-era="ancient"] .hud-welcome { letter-spacing: .06em; }
+
+/* Inputs & buttons */
+:root[data-era="ancient"] input, :root[data-era="ancient"] textarea, :root[data-era="ancient"] .select-input {
+  background: rgba(0, 0, 0, .28) !important; border: 1px solid var(--border) !important; border-radius: 3px !important;
+}
+:root[data-era="ancient"][data-theme="light"] input, :root[data-era="ancient"][data-theme="light"] textarea, :root[data-era="ancient"][data-theme="light"] .select-input {
+  background: rgba(255, 255, 255, .55) !important;
+}
+:root[data-era="ancient"] input:focus, :root[data-era="ancient"] textarea:focus, :root[data-era="ancient"] .select-input:focus {
+  background: rgba(227, 176, 75, .1) !important; box-shadow: 0 0 0 3px var(--cyan-glow);
+}
+:root[data-era="ancient"] .rgb-slider, :root[data-era="ancient"] .rgb-native { border-radius: 999px !important; }
+:root[data-era="ancient"] .rgb-native { border-radius: 6px !important; }
+:root[data-era="ancient"] .btn-primary {
+  background: linear-gradient(180deg, #f2cf8e, #c4903a 55%, #9c6a24); background-size: auto; color: #1e1306;
+  clip-path: none; border: 1px solid #6d4a16; border-radius: 3px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 2px 0 #4a3010;
+}
+:root[data-era="ancient"] .btn-secondary, :root[data-era="ancient"] .btn-google {
+  background: rgba(227, 176, 75, .12); clip-path: none; border-radius: 3px; border: 1px solid var(--border);
+}
+:root[data-era="ancient"] .btn-secondary:hover, :root[data-era="ancient"] .btn-google:hover { background: rgba(227, 176, 75, .24); border-color: var(--cyan); }
+:root[data-era="ancient"] .btn-icon:hover, :root[data-era="ancient"] .btn-mini:hover { background: rgba(227, 176, 75, .2); box-shadow: 0 0 16px -2px var(--cyan-glow); }
+:root[data-era="ancient"] .era-btn { background: linear-gradient(180deg, rgba(242, 207, 142, .22), rgba(196, 98, 58, .18)); border-radius: 2px; }
+
+/* Avatars become doorways; rows become tablets */
+:root[data-era="ancient"] .avatar-btn, :root[data-era="ancient"] .avatar-img, :root[data-era="ancient"] .avatar-fallback { border-radius: 50% 50% 8px 8px; }
+:root[data-era="ancient"] .avatar-btn:hover { border-radius: 50% 50% 8px 8px; }
+:root[data-era="ancient"] .contact-row { border-radius: 2px; }
+:root[data-era="ancient"] .contact-row:hover { background: rgba(227, 176, 75, .1); }
+:root[data-era="ancient"] .contact-row.active { background: linear-gradient(90deg, rgba(227, 176, 75, .24), rgba(196, 98, 58, .06)); border-color: var(--cyan); }
+:root[data-era="ancient"] .requests-section { border-radius: 3px; background: rgba(227, 176, 75, .06); border-color: var(--cyan-dim); }
+
+/* Messages: clay tablets */
+:root[data-era="ancient"] .bubble {
+  border-radius: 4px 14px 14px 14px; border: 1px solid var(--border);
+  box-shadow: 0 3px 0 -1px rgba(0, 0, 0, .35); -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+html[data-era="ancient"]:not(.has-bubble-mine) .bubble.mine {
+  border-radius: 14px 4px 14px 14px; border-color: rgba(242, 207, 142, .55); color: #fff1d6;
+  background: linear-gradient(135deg, rgba(196, 98, 58, .97), rgba(120, 52, 28, .95));
+  box-shadow: 0 3px 0 -1px rgba(0, 0, 0, .4);
+}
+:root[data-era="ancient"] .bubble-time { font-family: var(--font-body); font-size: .75em; letter-spacing: .04em; }
+:root[data-era="ancient"] .date-sep span { border-radius: 2px; }
+:root[data-era="ancient"] .pinned-bar { background: linear-gradient(90deg, rgba(227, 176, 75, .18), transparent); border-bottom-color: rgba(227, 176, 75, .35); }
+
+/* HUD, lock and boot screens */
+:root[data-era="ancient"] .hud-time { background: linear-gradient(180deg, #fff3d4, var(--cyan) 70%, var(--plasma)); -webkit-background-clip: text; background-clip: text; }
+:root[data-era="ancient"] .hud-stat, :root[data-era="ancient"] .hud-mini { border-radius: 2px; background: rgba(227, 176, 75, .07); }
+:root[data-era="ancient"] .lock-screen, :root[data-era="ancient"] .boot-splash { background: radial-gradient(80vmax 60vmax at 50% 30%, #3a2a12, var(--bg-void) 70%); }
+:root[data-era="ancient"] .keypad .key { border-radius: 4px; background: rgba(227, 176, 75, .08); }
+:root[data-era="ancient"] .keypad .key:active { background: rgba(227, 176, 75, .3); }
+:root[data-era="ancient"] .brand-glyph, :root[data-era="ancient"] .boot-glyph, :root[data-era="ancient"] .lock-glyph { background: linear-gradient(135deg, var(--plasma), var(--cyan)); -webkit-background-clip: text; background-clip: text; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CHAT STUDIO — readable-anywhere bubbles, bubble colours, tint, shapes, fx
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root { --wp-rgb: 8, 12, 20; --bubble-theirs-bg: rgba(24, 19, 58, .88); --bubble-theirs-text: var(--text-primary); }
+:root[data-theme="light"] { --wp-rgb: 244, 248, 251; --bubble-theirs-bg: rgba(255, 255, 255, .93); }
+:root[data-era="ancient"] { --bubble-theirs-bg: rgba(46, 34, 18, .9); }
+:root[data-era="ancient"][data-theme="light"] { --bubble-theirs-bg: rgba(250, 240, 214, .94); }
+
+/* Their bubbles always sit on a near-opaque backing, so wallpaper can't wash text out */
+html .bubble.theirs {
+  background: var(--bubble-theirs-bg); color: var(--bubble-theirs-text);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+html.has-bubble-theirs .bubble.theirs .bubble-time { color: inherit; opacity: .65; }
+
+/* Your bubbles: custom colour / accent-derived colour, text picked by contrast */
+html.has-bubble-mine .bubble.mine {
+  background: linear-gradient(135deg, var(--bubble-mine-1), var(--bubble-mine-2)) !important;
+  color: var(--bubble-mine-text) !important; border-color: rgba(255, 255, 255, .18) !important;
+  box-shadow: 0 10px 28px -12px var(--bubble-mine-glow), 0 0 0 1px rgba(255, 255, 255, .05) inset !important;
+}
+html.has-bubble-mine .bubble.mine .bubble-time { color: inherit; opacity: .7; }
+
+/* Wallpaper dimming layer: strength is measured/auto or set by the slider */
+html:root[data-theme] .message-log.has-wallpaper::before { background: rgba(var(--wp-rgb), var(--wp-scrim, .45)); }
+
+/* Chat tint wash (no wallpaper) + header/composer edge light */
+html.has-chat-tint .message-log:not(.has-wallpaper) {
+  background-image: linear-gradient(180deg, rgba(var(--chat-tint-rgb), .22), rgba(var(--chat-tint-rgb), .04) 60%, rgba(var(--chat-tint-rgb), .16));
+}
+html.has-chat-tint .chat-header { box-shadow: 0 1px 0 rgba(var(--chat-tint-rgb), .55), 0 12px 30px -18px rgba(var(--chat-tint-rgb), .85); }
+html.has-chat-tint .message-form { border-top-color: rgba(var(--chat-tint-rgb), .55); }
+
+/* Shapes (shard = the era's own default, no override) */
+html[data-bubble="round"] .bubble { border-radius: 22px !important; }
+html[data-bubble="sharp"] .bubble { border-radius: 3px !important; }
+html[data-bubble="cloud"] .bubble { border-radius: 26px 26px 26px 8px !important; }
+html[data-bubble="cloud"] .bubble.mine { border-radius: 26px 26px 8px 26px !important; }
+html[data-bubble="leaf"] .bubble { border-radius: 24px 4px 24px 4px !important; }
+
+/* Effects */
+html[data-bubble-fx="glow"] .bubble.mine {
+  box-shadow: 0 0 22px -2px var(--bubble-mine-glow, var(--cyan-glow)), 0 0 0 1px rgba(255, 255, 255, .08) inset !important;
+}
+html[data-bubble-fx="shimmer"] .bubble.mine { background-size: 220% 100% !important; animation: bubble-shimmer 5s ease-in-out infinite; }
+html[data-bubble-fx="shimmer"] .bubble.mine.flash { animation: flash-highlight 1.2s ease; }
+@keyframes bubble-shimmer { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+@media (prefers-reduced-motion: reduce) { html[data-bubble-fx="shimmer"] .bubble.mine { animation: none; } }
+
+/* ── Studio UI ─────────────────────────────────────────────────────── */
+.chat-preview {
+  position: relative; isolation: isolate; display: flex; flex-direction: column; gap: 8px; padding: 14px; min-height: 120px;
+  border: 1px solid var(--border); border-radius: 14px; cursor: pointer; overflow: hidden; user-select: none;
+}
+.chat-preview::before { content: ""; position: absolute; inset: 0; z-index: 0; background: rgba(var(--wp-rgb), var(--wp-scrim, .45)); }
+.chat-preview > * { position: relative; z-index: 1; max-width: 82%; }
+.chat-preview .bubble.mine { align-self: flex-end; }
+.chat-preview[data-bg="0"] { background: linear-gradient(135deg, #0b1020, #1d1b45); }
+.chat-preview[data-bg="1"] { background: linear-gradient(135deg, #fdfbf2, #ffe9a8); }
+.chat-preview[data-bg="2"] { background: repeating-linear-gradient(45deg, #ff5c8a 0 14px, #6ff2dc 14px 28px, #ffffff 28px 42px, #111 42px 56px); }
+.chat-preview[data-bg="3"] { background: radial-gradient(circle at 75% 20%, #ffd27a, transparent 45%), radial-gradient(circle at 20% 80%, #3b6ea8, transparent 55%), linear-gradient(180deg, #ff9a6b, #3a2f6e); }
+
+.studio-presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.studio-preset {
+  display: flex; flex-direction: column; gap: 6px; padding: 6px; cursor: pointer; text-align: center;
+  background: transparent; color: var(--text-primary); border: 1px solid var(--border); border-radius: 10px;
+  font-family: var(--font-display); font-size: 10px; letter-spacing: .05em; transition: box-shadow .2s, transform .15s;
+}
+.studio-preset:hover { box-shadow: 0 0 18px -4px var(--cyan-glow); }
+.studio-preset:active { transform: scale(.96); }
+.studio-preset.selected { box-shadow: 0 0 0 2px var(--cyan); }
+.studio-preset .sp-swatch { height: 26px; border-radius: 7px; border: 1px solid rgba(255, 255, 255, .15); }
+
+.rgb-targets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.rgb-tab {
+  display: flex; align-items: center; justify-content: center; padding: 8px 2px; font-size: 11px; cursor: pointer;
+  background: transparent; color: var(--text-dim); border: 1px solid var(--border); border-radius: 8px; transition: color .2s, box-shadow .2s, border-color .2s;
+}
+.rgb-tab i { flex: 0 0 9px; width: 9px; height: 9px; margin-right: 5px; border-radius: 50%; border: 1px solid var(--border); background: var(--dot, transparent); }
+.rgb-tab.active { color: var(--text-primary); border-color: var(--cyan); box-shadow: 0 0 14px -4px var(--cyan-glow); }
+
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.studio-chip {
+  padding: 7px 12px; font-size: 12px; cursor: pointer; background: transparent; color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 999px; transition: box-shadow .2s, background .2s;
+}
+.studio-chip.selected { background: var(--cyan-glow); border-color: var(--cyan); box-shadow: 0 0 12px -4px var(--cyan-glow); }
+.scrim-slider { background: linear-gradient(90deg, transparent, rgba(var(--wp-rgb), .9)) !important; border-radius: 999px !important; height: 10px; }
+.scrim-auto { flex: 0 0 auto; padding: 8px 14px; }

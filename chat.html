@@ -68,6 +68,7 @@
         <button id="btn-account" class="btn-icon" title="Account settings">⚙️</button>
         <button id="btn-logout" class="btn-icon" title="Sign out">⏻</button>
       </div>
+      <button type="button" class="era-btn" data-era-toggle>🏺 Ancient mode · 2974 BCE</button>
 
       <div class="hud-mini" aria-label="Clock and welcome">
         <div class="hud-mini-greet">
@@ -204,6 +205,8 @@
         <button class="btn-icon" data-close-dialog>✕</button>
       </header>
       <div class="dialog-body">
+        <button type="button" class="era-btn" data-era-toggle>🏺 Ancient mode · 2974 BCE</button>
+        <hr class="dialog-divider" />
         <label class="switch-row">
           <span>Dark mode</span>
           <input type="checkbox" id="theme-switch" />
@@ -225,7 +228,22 @@
 
         <hr class="dialog-divider" />
 
-        <label class="field-label">Accent colour <span class="field-hint-inline">(RGB mixer — tints the whole app live)</span></label>
+        <label class="field-label">Chat studio <span class="field-hint-inline">(colours, bubbles &amp; readability — tap the preview to test backgrounds)</span></label>
+
+        <div id="chat-preview" class="chat-preview" data-bg="2" title="Tap to try another background">
+          <div class="bubble theirs"><span class="bubble-text">Readable on any wallpaper ✨</span><span class="bubble-time">10:41</span></div>
+          <div class="bubble mine"><span class="bubble-text">Even this busy one. Try me!</span><span class="bubble-time">10:42 ✓✓</span></div>
+        </div>
+
+        <div id="studio-presets" class="studio-presets" aria-label="Chat themes"></div>
+
+        <label class="field-label">Colour to edit</label>
+        <div class="rgb-targets" role="tablist" aria-label="Colour target">
+          <button type="button" class="rgb-tab active" data-target="accent"><i></i>Accent</button>
+          <button type="button" class="rgb-tab" data-target="bubbleMine"><i></i>My bubbles</button>
+          <button type="button" class="rgb-tab" data-target="bubbleTheirs"><i></i>Their bubbles</button>
+          <button type="button" class="rgb-tab" data-target="chatTint"><i></i>Chat tint</button>
+        </div>
         <div class="rgb-mixer">
           <div class="rgb-preview-row">
             <div id="rgb-preview" class="rgb-preview" aria-hidden="true"></div>
@@ -235,9 +253,23 @@
           <label class="rgb-row"><span class="rgb-chan r">R</span><input id="rgb-r" class="rgb-slider rgb-r" type="range" min="0" max="255" value="111" /><output id="rgb-r-val">111</output></label>
           <label class="rgb-row"><span class="rgb-chan g">G</span><input id="rgb-g" class="rgb-slider rgb-g" type="range" min="0" max="255" value="242" /><output id="rgb-g-val">242</output></label>
           <label class="rgb-row"><span class="rgb-chan b">B</span><input id="rgb-b" class="rgb-slider rgb-b" type="range" min="0" max="255" value="220" /><output id="rgb-b-val">220</output></label>
-          <div id="rgb-presets" class="color-grid" aria-label="Neon presets"></div>
-          <button id="btn-reset-accent" type="button" class="btn-secondary full-width">Reset accent colour</button>
+          <div id="rgb-presets" class="color-grid" aria-label="Quick colours"></div>
+          <button id="btn-reset-accent" type="button" class="btn-secondary full-width">Reset this colour</button>
         </div>
+
+        <label class="field-label">Bubble shape</label>
+        <div id="studio-shapes" class="chip-row"></div>
+        <label class="field-label">Bubble effect</label>
+        <div id="studio-fx" class="chip-row"></div>
+
+        <label class="field-label">Wallpaper dimming <output id="scrim-val" class="field-hint-inline">Auto</output></label>
+        <div class="rgb-row">
+          <input id="scrim-slider" class="rgb-slider scrim-slider" type="range" min="0" max="90" value="45" aria-label="Wallpaper dimming" />
+          <button id="btn-scrim-auto" type="button" class="btn-secondary scrim-auto">Auto</button>
+        </div>
+        <p class="fine-print">Auto measures your wallpaper and dims or lightens it so messages always stay readable.</p>
+
+        <button id="btn-reset-studio" type="button" class="btn-secondary full-width">Reset chat style</button>
       </div>
     </div>
   </div>
@@ -409,6 +441,7 @@
 
   <script type="module" src="noautofill.js"></script>
   <script type="module" src="viewport.js"></script>
+  <script type="module" src="era.js"></script>
   <script type="module" src="hud.js"></script>
   <script type="module" src="app.js"></script>
 </body>
