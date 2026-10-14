@@ -71,6 +71,17 @@ import {
   setContactPrefs,
 } from "./appearance.js";
 
+import { setOperatorName, runBootSplash } from "./hud.js";
+import {
+  initExtras,
+  onConversationOpened,
+  afterSend,
+  afterEditEnd,
+  autoGrowComposer,
+  clearAllDrafts,
+  isVaultLocked,
+} from "./extras.js";
+
 let myUid = null;
 let myProfile = null;
 let contacts = new Map(); // uid -> profile (includes accepted contacts AND pending requesters)
@@ -165,6 +176,8 @@ const els = {
   btnDismissNotify: document.getElementById("btn-dismiss-notify"),
 };
 
+if (!isVaultLocked()) runBootSplash();
+
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
     window.location.href = "index.html";
@@ -175,6 +188,12 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 async function boot() {
+  initExtras({
+    getActiveUid: () => activeContactUid,
+    isEditing: () => !!editingMessageId,
+    signOut: signOutNow,
+    toast: (t) => flashToast(t),
+  });
   await initAppearance();
   setupAppearancePanel();
   setupAccountDialog();
@@ -216,6 +235,7 @@ async function boot() {
   }
 
   els.myName.textContent = myProfile.displayName;
+  setOperatorName(myProfile.displayName);
   els.myIdCode.textContent = formatIdCode(myProfile.idCode);
   renderAvatar(els.myAvatar, myProfile.profilePhotoBase64, myProfile.displayName);
 
@@ -329,9 +349,10 @@ async function handleIncoming(localMessage) {
   } else {
     sendDeliveryAck(senderUid, myUid, localMessage.messageId);
     await bumpUnread(senderUid);
+    const hidden = isVaultLocked();
     notifyIncomingMessage({
-      fromName: profile.displayName || "Unknown",
-      preview: previewText,
+      fromName: hidden ? "VaultChatt" : profile.displayName || "Unknown",
+      preview: hidden ? "New encrypted message" : previewText,
       isNewSender,
       onClick: () => openConversation(senderUid),
     });
@@ -638,6 +659,7 @@ async function openConversation(uid) {
   for (const m of history) await renderMessage(m);
   scrollToBottom();
   refreshPinnedBar();
+  onConversationOpened(uid); // closes chat-search, restores any unsent draft
 
   // Opening a chat marks all of their messages as read and notifies them
   // (Section 3 — read receipts).
@@ -794,6 +816,7 @@ function attachBubbleContextMenu(bubble, msg) {
 function startEdit(msg) {
   editingMessageId = msg.messageId;
   els.messageInput.value = msg.content;
+  autoGrowComposer();
   els.messageInput.focus();
   els.messageForm.classList.add("editing");
 }
@@ -897,7 +920,9 @@ els.messageForm.addEventListener("submit", async (e) => {
   if (!text || !activeContactUid) return;
 
   const profile = contacts.get(activeContactUid);
+  const sendingTo = activeContactUid;
   els.messageInput.value = "";
+  autoGrowComposer();
 
   if (editingMessageId) {
     const id = editingMessageId;
@@ -913,6 +938,7 @@ els.messageForm.addEventListener("submit", async (e) => {
     } catch (err) {
       alert("Edit failed to send: " + err.message);
     }
+    afterEditEnd(sendingTo); // bring back whatever was being typed before the edit
     return;
   }
 
@@ -921,8 +947,14 @@ els.messageForm.addEventListener("submit", async (e) => {
     await renderMessage(localMessage);
     bumpContactPreview(activeContactUid, text, localMessage.timestamp);
     scrollToBottom();
+    afterSend(sendingTo);
   } catch (err) {
     alert("Message failed to send: " + err.message);
+    // Don't lose what was typed — put it back so it can be re-sent.
+    if (activeContactUid === sendingTo && !els.messageInput.value) {
+      els.messageInput.value = text;
+      els.messageInput.dispatchEvent(new Event("input", { bubbles: true }));
+    }
   }
 });
 
@@ -1167,14 +1199,19 @@ els.removeContactBtn.addEventListener("click", async () => {
 
 document.getElementById("btn-remove-contact-menu").addEventListener("click", () => els.removeContactBtn.click());
 
-els.logoutBtn.addEventListener("click", async () => {
-  if (!confirm("Sign out?")) return;
+async function signOutNow() {
   await setOnlinePresence(myUid, false);
   stopInbox();
+  clearAllDrafts(); // unsent text shouldn't outlive the session
   sessionStorage.setItem("vc_uid", "signing_out");
   localStorage.removeItem("vc_session");
   await signOut(auth);
   window.location.href = "index.html";
+}
+
+els.logoutBtn.addEventListener("click", async () => {
+  if (!confirm("Sign out?")) return;
+  await signOutNow();
 });
 
 // ─── ID code copy / share (Section 1) ─────────────────────────────────
@@ -1454,6 +1491,7 @@ function setupAccountDialog() {
       // This is the name actually shown around the app — update it live
       // instead of waiting for a reload.
       els.myName.textContent = displayName;
+      setOperatorName(displayName);
       renderAvatar(els.myAvatar, myProfile.profilePhotoBase64, displayName);
       setStatus(els.accountDisplayNameStatus, "Display name updated", "success");
       flashToast("Display name updated");

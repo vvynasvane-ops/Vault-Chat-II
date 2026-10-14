@@ -15,6 +15,7 @@ import {
   ensureIdCode,
 } from "./firestore-api.js";
 import { getOrCreatePublicKeyBase64 } from "./crypto.js";
+import { refreshAutofillGuard } from "./noautofill.js";
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -52,7 +53,24 @@ els.toggle.addEventListener("click", () => {
   els.username.classList.toggle("hidden", isLoginMode);
   els.displayName.classList.toggle("hidden", isLoginMode);
   setError("");
+  applyAutofillPolicy();
 });
+
+// Saved logins belong in SIGN-IN only. When creating an account the email and
+// password are brand new, so we shut autofill off there (and "new-password"
+// tells browsers to offer a fresh password, never an old saved one). The
+// username / display-name boxes are never autofilled in either mode — that
+// is handled globally by noautofill.js.
+function applyAutofillPolicy() {
+  for (const el of [els.email, els.password]) {
+    if (isLoginMode) el.dataset.autofill = "allow";
+    else delete el.dataset.autofill;
+  }
+  els.form.setAttribute("autocomplete", isLoginMode ? "on" : "off");
+  els.email.setAttribute("autocomplete", isLoginMode ? "username" : "off");
+  els.password.setAttribute("autocomplete", isLoginMode ? "current-password" : "new-password");
+  refreshAutofillGuard();
+}
 
 els.form.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -239,6 +257,8 @@ async function uniqueUsernameFromGoogle(user) {
 }
 
 function saveSession(uid, email, username, displayName, idCode) {
+  // Just authenticated: the next page load shouldn't ask for the Vault Lock PIN.
+  sessionStorage.setItem("vc_unlock_once", "1");
   localStorage.setItem(
     "vc_session",
     JSON.stringify({ uid, email, username, displayName, idCode })

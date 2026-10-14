@@ -673,6 +673,7 @@ input:focus {
 /* ── Bubble extras (Sections 3, 5, 6, 7) ─────────────────────────── */
 
 .bubble { position: relative; }
+.bubble-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .bubble.flash { animation: flash-highlight 1.2s ease; }
 @keyframes flash-highlight {
   0%, 100% { box-shadow: none; }
@@ -1041,7 +1042,6 @@ img, video { max-width: 100%; }
 /* Composer controls: consistent tappable height so Send never collapses */
 .message-form .btn-icon { width: 40px; height: 40px; }
 .message-form .btn-primary { height: 40px; }
-.message-form #message-input { height: 40px; padding-top: 0; padding-bottom: 0; }
 
 /* Header polish on small screens: keep title readable, move "Remove contact" into the ⋮ menu */
 .chat-header { gap: 10px; align-items: center; }
@@ -1123,4 +1123,400 @@ img, video { max-width: 100%; }
    Attach/file buttons stay — the keyboard has no equivalent for those. */
 @media (max-width: 720px) and (pointer: coarse) {
   #btn-emoji, #btn-gif { display: none; }
+}
+
+
+/* ════════════════════════════════════════════════════════════════════
+   Section 15 — autofill guard, keyboard fit, bigger composer, HUD,
+   search, drafts and Vault Lock
+   ════════════════════════════════════════════════════════════════════ */
+
+html { background: var(--bg-void); }
+
+/* ── Autofill guard (pairs with noautofill.js) ────────────────────────
+   The animation exists only so JS gets an `animationstart` event the moment
+   a browser autofills a field that should never be autofilled. */
+input:not([data-autofill="allow"]):-webkit-autofill { animation: vc-autofill-start 0.01s; }
+input:not([data-autofill="allow"]):autofill { animation: vc-autofill-start 0.01s; }
+@keyframes vc-autofill-start { from { opacity: 1; } to { opacity: 1; } }
+
+/* Where autofill IS wanted (sign-in), keep it on-theme instead of bright white. */
+input:-webkit-autofill,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text-primary);
+  caret-color: var(--text-primary);
+  box-shadow: 0 0 0 100px var(--bg-panel-raised) inset;
+  transition: background-color 9999s ease-out;
+}
+
+.acct-group { display: flex; flex-direction: column; gap: 12px; margin: 0; }
+.dialog-body input[type="text"],
+.dialog-body input[type="password"] { font-size: 15px; }
+
+/* ── Keyboard fit: the app tracks the VISIBLE viewport (viewport.js) ──── */
+html.vv-ready .app-body {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: var(--app-top, 0px);
+  height: var(--app-h, 100dvh);
+}
+/* With the keyboard up, the home-bar allowance below the composer is just a
+   gap — drop it, and give the message list every spare pixel. */
+html.kb-open .message-form { padding-bottom: 10px; }
+html.kb-open .notify-banner,
+html.kb-open .pinned-bar { display: none; }
+
+/* ── Composer: roomy, auto-growing, tray on phones ─────────────────── */
+.message-form { align-items: flex-end; gap: 8px; }
+
+.message-form textarea {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  min-height: 46px;
+  max-height: 160px;
+  resize: none;
+  overflow-y: hidden;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 16px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: calc(15px * var(--user-font-scale, 1));
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.message-form textarea::placeholder { color: var(--text-dim); }
+.message-form textarea:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px var(--cyan-glow); }
+.message-form textarea:disabled { opacity: 0.5; }
+
+.message-form .btn-icon { width: 44px; height: 46px; display: inline-flex; align-items: center; justify-content: center; }
+.message-form .btn-primary { height: 46px; margin-top: 0; }
+
+.tools-toggle { display: none !important; }
+.composer-tools { display: contents; }
+.tool-label { display: none; }
+.tray-only { display: none !important; }
+
+@keyframes tray-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 720px) {
+  .message-form {
+    position: relative;
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px));
+    gap: 8px;
+  }
+  html.kb-open .message-form { padding-bottom: 8px; }
+
+  /* The text bar gets the width: attachments fold into the "+" tray. */
+  .message-form textarea {
+    min-height: 52px;
+    max-height: min(38dvh, 180px);
+    border-radius: 18px;
+    padding: 14px 16px;
+    font-size: max(17px, calc(17px * var(--user-font-scale, 1))); /* ≥16px also stops iOS zooming in */
+  }
+
+  .message-form .btn-icon.tools-toggle {
+    display: inline-flex !important;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    font-size: 24px;
+    color: var(--cyan);
+    border-color: var(--cyan-dim);
+    transition: transform 0.18s ease, background 0.15s;
+  }
+  .message-form.tools-open .tools-toggle { transform: rotate(45deg); background: var(--cyan-glow); }
+
+  .composer-tools {
+    display: none;
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: calc(100% + 8px);
+    z-index: 30;
+    padding: 10px;
+    gap: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+    background: var(--bg-panel-raised);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
+  }
+  .message-form.tools-open .composer-tools { display: grid; animation: tray-in 0.16s ease-out; }
+  .composer-tools .btn-icon {
+    width: auto !important;
+    height: auto !important;
+    min-height: 68px;
+    padding: 8px 4px;
+    flex-direction: column;
+    gap: 4px;
+    border-radius: 14px;
+  }
+  .composer-tools .tool-ico { font-size: 22px; line-height: 1; }
+  .composer-tools .tool-label { display: block; font-size: 11px; letter-spacing: 0.3px; color: var(--text-dim); }
+  .tray-only { display: flex !important; }
+
+  /* Send becomes a round button so the text bar keeps every spare pixel. */
+  .message-form .btn-primary {
+    width: 52px;
+    height: 52px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .message-form .btn-primary::before { content: "➤"; font-size: 20px; letter-spacing: 0; }
+}
+
+/* ── Welcome HUD / clock ──────────────────────────────────────────────── */
+
+.hud-pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--online);
+  animation: hud-pulse 2s ease-out infinite;
+}
+@keyframes hud-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(34, 255, 176, 0.55); }
+  100% { box-shadow: 0 0 0 10px rgba(34, 255, 176, 0); }
+}
+@keyframes hud-blink { 50% { opacity: 0; } }
+
+.hud-greeting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: var(--cyan-dim);
+}
+.hud-welcome {
+  margin: 0 0 8px;
+  min-height: 1.3em;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(20px, 5.6vw, 30px);
+  letter-spacing: 4px;
+  color: var(--text-primary);
+  text-shadow: 0 0 18px var(--cyan-glow);
+  overflow-wrap: anywhere;
+}
+.hud-welcome::after { content: "▌"; margin-left: 3px; color: var(--cyan); animation: hud-blink 1s steps(1) infinite; }
+
+.hud-time {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 2px;
+  color: var(--cyan);
+  text-shadow: 0 0 18px var(--cyan-glow);
+  cursor: pointer;
+  user-select: none;
+}
+.hud-time-lg { font-size: clamp(34px, 11vw, 52px); letter-spacing: 3px; }
+.hud-sec { font-size: 0.6em; opacity: 0.55; }
+.hud-ampm { font-size: 0.34em; margin-left: 6px; letter-spacing: 2px; opacity: 0.8; }
+.hud-date-line {
+  margin: 4px 0 0;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+}
+
+/* sign-in page: HUD above the card */
+.auth-body { flex-direction: column; gap: 18px; }
+.auth-hud { position: relative; z-index: 2; width: 100%; max-width: 420px; text-align: center; }
+
+/* chat page: welcome dashboard when no conversation is open */
+.welcome-hud {
+  width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 56px 16px 28px;
+  text-align: center;
+}
+.hud-ring { position: relative; width: min(260px, 66vw); aspect-ratio: 1; margin: 10px auto 18px; }
+.hud-ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.hud-ring-svg .tick { stroke: var(--border); stroke-width: 1.2; }
+.hud-ring-svg .tick-long { stroke: var(--cyan-dim); stroke-width: 2; }
+.ring-track { fill: none; stroke: var(--border); stroke-width: 3; }
+.ring-arc {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 100px 100px;
+}
+.ring-sec { stroke: var(--cyan); filter: drop-shadow(0 0 4px var(--cyan)); }
+.ring-min { stroke: #b58bff; transition: stroke-dashoffset 1s linear; }
+.ring-hr { stroke: var(--online); transition: stroke-dashoffset 1s linear; }
+.ring-orbit { transform-origin: 100px 100px; transition: transform 0.45s cubic-bezier(0.3, 1.5, 0.5, 1); }
+.ring-orbit circle { fill: var(--cyan); filter: drop-shadow(0 0 5px var(--cyan)); }
+.hud-ring-core { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+.hud-ring .hud-time { font-size: clamp(22px, 7vw, 30px); }
+.hud-weekday { font-family: var(--font-display); font-size: 11px; letter-spacing: 3px; color: var(--cyan-dim); }
+.hud-date { font-family: var(--font-display); font-size: 11px; letter-spacing: 1.5px; color: var(--text-dim); }
+
+.hud-stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.hud-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 104px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(0, 229, 255, 0.04);
+}
+.hud-stat .k { font-size: 9px; letter-spacing: 2px; color: var(--text-dim); }
+.hud-stat .v { font-family: var(--font-display); font-size: 11px; letter-spacing: 1px; color: var(--cyan); }
+.welcome-hint { margin: 18px 0 0; font-size: 14px; color: var(--text-dim); }
+
+/* sidebar mini HUD */
+.hud-mini {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.08), transparent 70%);
+}
+.hud-mini-greet { margin-bottom: 6px; font-size: 12px; letter-spacing: 1.5px; color: var(--text-dim); text-transform: uppercase; }
+.hud-mini-greet b { color: var(--cyan); letter-spacing: 1px; }
+.hud-mini-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.hud-mini-clock { display: flex; flex-direction: column; min-width: 0; }
+.hud-mini-time { font-family: var(--font-display); font-weight: 700; font-size: 20px; color: var(--cyan); text-shadow: 0 0 14px var(--cyan-glow); cursor: pointer; font-variant-numeric: tabular-nums; }
+.hud-mini-time .hud-sec { font-size: 0.62em; }
+.hud-mini-date { font-family: var(--font-display); font-size: 10px; letter-spacing: 1.5px; color: var(--text-dim); }
+
+/* boot splash */
+.boot-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at 50% 28%, #0d1b2e, #05080f 70%);
+  color: #e8f6fa;
+  transition: opacity 0.45s, transform 0.45s;
+}
+.boot-splash.leaving { opacity: 0; transform: scale(1.04); pointer-events: none; }
+.boot-core { width: min(86vw, 360px); text-align: center; }
+.boot-glyph { font-size: 54px; color: #00e5ff; text-shadow: 0 0 24px rgba(0, 229, 255, 0.6); animation: glyph-glow 2.4s ease-in-out infinite; }
+@keyframes glyph-glow { 50% { text-shadow: 0 0 40px rgba(0, 229, 255, 0.95); transform: scale(1.06); } }
+.boot-title { font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: 4px; }
+.boot-title span { color: #00e5ff; }
+.boot-lines { min-height: 92px; margin: 22px 0 10px; text-align: left; font-family: "Courier New", Consolas, monospace; font-size: 12px; color: #7fd8e6; }
+.boot-lines p { margin: 3px 0; animation: boot-line 0.25s ease-out; }
+@keyframes boot-line { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+.boot-skip { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #5f7a8f; }
+
+/* ── Search in conversation ──────────────────────────────────────────── */
+.chat-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-panel-raised);
+  border-bottom: 1px solid var(--border);
+}
+.chat-search-bar input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: var(--text-primary);
+  font-size: 16px;
+  outline: none;
+}
+.chat-search-bar input:focus { border-color: var(--cyan); box-shadow: none; }
+.chat-search-bar .btn-icon { width: 36px; height: 36px; flex-shrink: 0; }
+.chat-search-bar .btn-icon:disabled { opacity: 0.35; cursor: default; }
+.chat-search-count { min-width: 34px; text-align: center; font-family: var(--font-display); font-size: 11px; color: var(--text-dim); }
+mark.hit { background: rgba(255, 214, 0, 0.35); color: inherit; border-radius: 3px; padding: 0 1px; }
+mark.hit.hit-current { background: #ffd54a; color: #1a1400; box-shadow: 0 0 0 2px rgba(255, 213, 74, 0.45); }
+
+/* ── Drafts ──────────────────────────────────────────────────────────── */
+.contact-row.has-draft .contact-name::after { content: " ✎"; color: var(--cyan); font-size: 0.85em; }
+
+/* ── Vault Lock ──────────────────────────────────────────────────────── */
+.lock-options { display: flex; flex-direction: column; gap: 12px; }
+.lock-options.hidden { display: none !important; }
+
+.lock-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  overflow-y: auto;
+  padding: 16px;
+  color: #e8f6fa;
+  background:
+    repeating-linear-gradient(to bottom, rgba(0, 229, 255, 0.025) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 50% 0%, #0f2236 0%, #05080f 65%);
+}
+.lock-core { width: min(92vw, 340px); margin: auto; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.lock-glyph { font-size: 40px; color: #00e5ff; text-shadow: 0 0 22px rgba(0, 229, 255, 0.6); animation: glyph-glow 2.4s ease-in-out infinite; }
+.lock-title { margin: 6px 0 4px; font-family: var(--font-display); font-size: 16px; letter-spacing: 5px; }
+.lock-sub { margin: 0 0 8px; font-size: 13px; letter-spacing: 2px; color: #7b93a8; text-transform: uppercase; }
+.lock-sub b { color: #00e5ff; }
+.lock-time { font-family: var(--font-display); font-weight: 700; font-size: 34px; color: #00e5ff; text-shadow: 0 0 20px rgba(0, 229, 255, 0.45); font-variant-numeric: tabular-nums; }
+.lock-date { margin-bottom: 14px; font-family: var(--font-display); font-size: 10px; letter-spacing: 2px; color: #7b93a8; }
+.pin-dots { display: flex; justify-content: center; gap: 12px; min-height: 16px; margin: 6px 0 10px; }
+.pin-dots i { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid #0891a8; transition: background 0.12s, box-shadow 0.12s, transform 0.12s; }
+.pin-dots i.on { background: #00e5ff; box-shadow: 0 0 10px #00e5ff; transform: scale(1.1); }
+.lock-msg { min-height: 20px; margin: 0 0 10px; font-size: 14px; color: #9db2c4; }
+.lock-msg[data-kind="error"] { color: var(--danger); }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: 100%; max-width: 280px; }
+.keypad .key {
+  aspect-ratio: 1.25;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  background: rgba(0, 229, 255, 0.05);
+  color: #e8f6fa;
+  font-family: var(--font-display);
+  font-size: 22px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.1s, transform 0.08s;
+}
+.keypad .key:active { background: rgba(0, 229, 255, 0.35); transform: scale(0.95); }
+.keypad .key-fn { color: #00e5ff; font-size: 20px; }
+.keypad.disabled { opacity: 0.35; pointer-events: none; }
+.lock-screen[data-mode="unlock"] .keypad .key:last-child,
+.lock-screen[data-mode="verify-current"] .keypad .key:last-child { visibility: hidden; }
+.lock-core .btn-link { color: #5fb7c7; margin-top: 14px; }
+.lock-cancel { position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); right: 14px; color: #9db2c4; }
+.lock-screen.shake .lock-core { animation: lock-shake 0.4s; }
+@keyframes lock-shake { 20%, 60% { transform: translateX(-9px); } 40%, 80% { transform: translateX(9px); } }
+
+@media (max-height: 640px) {
+  .lock-date, .lock-glyph { display: none; }
+  .keypad { gap: 8px; }
+  .keypad .key { aspect-ratio: 1.9; font-size: 18px; }
+}
+
+body.vault-locked .app-shell,
+body.vault-locked .notify-banner { visibility: hidden; }
+body.privacy-shield .app-shell,
+body.privacy-shield .notify-banner { filter: blur(26px) saturate(0.5); }
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-pulse, .hud-welcome::after, .boot-glyph, .lock-glyph, .boot-lines p { animation: none !important; }
 }

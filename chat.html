@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
 <title>VaultChatt II — Terminal</title>
 
 <link rel="icon" type="image/x-icon" href="favicon.ico" />
@@ -27,6 +27,16 @@
 </head>
 <body class="app-body">
   <div class="hex-field" aria-hidden="true"></div>
+
+  <!-- Boot splash: plays once per browser session -->
+  <div id="boot-splash" class="boot-splash hidden" aria-hidden="true">
+    <div class="boot-core">
+      <div class="boot-glyph">◈</div>
+      <div class="boot-title">VAULT<span>CHATT</span> II</div>
+      <div class="boot-lines"></div>
+      <div class="boot-skip">tap to skip</div>
+    </div>
+  </div>
 
   <div id="notify-banner" class="notify-banner hidden">
     <span>🔔 Turn on notifications to see new messages when this tab isn't in front.</span>
@@ -58,13 +68,27 @@
         <button id="btn-logout" class="btn-icon" title="Sign out">⏻</button>
       </div>
 
+      <div class="hud-mini" aria-label="Clock and welcome">
+        <div class="hud-mini-greet">
+          <span data-hud="greeting">WELCOME</span>,
+          <b data-hud-name>Operator</b>
+        </div>
+        <div class="hud-mini-row">
+          <div class="hud-mini-clock">
+            <span class="hud-mini-time" data-hud="time" title="Tap to switch 12/24h">--:--:--</span>
+            <span class="hud-mini-date"><span data-hud="weekday-short">—</span> · <span data-hud="date">—</span></span>
+          </div>
+          <button id="btn-vault-lock" class="btn-icon" title="Vault Lock" aria-label="Vault Lock">🔐</button>
+        </div>
+      </div>
+
       <div class="add-contact">
-        <input id="input-friend-code" type="text" maxlength="6" placeholder="6-char ID code" autocapitalize="characters" />
+        <input id="input-friend-code" type="text" maxlength="6" placeholder="6-char ID code" autocapitalize="characters" autocomplete="off" spellcheck="false" />
         <button id="btn-add-contact" class="btn-secondary">+ Add</button>
       </div>
       <p id="add-contact-error" class="form-error"></p>
 
-      <input id="input-contact-search" type="text" class="search-input" placeholder="Search contacts…" />
+      <input id="input-contact-search" type="text" class="search-input" placeholder="Search contacts…" autocomplete="off" enterkeyhint="search" />
 
       <section id="requests-section" class="requests-section hidden">
         <div class="requests-heading">
@@ -101,6 +125,7 @@
           <div class="menu-anchor">
             <button id="btn-chat-menu" class="btn-icon" title="Chat menu">⋮</button>
             <div id="chat-menu" class="dropdown-menu hidden">
+              <button id="btn-search-chat" class="dropdown-item">🔎 Search in chat</button>
               <button id="btn-encryption-info" class="dropdown-item">🔒 Encryption info</button>
               <button id="btn-view-media" class="dropdown-item">🖼 View media</button>
               <button id="btn-set-wallpaper" class="dropdown-item">🖌 Set chat wallpaper</button>
@@ -113,19 +138,32 @@
       </header>
       <input id="wallpaper-input" type="file" accept="image/*" class="hidden" />
 
+      <div id="chat-search-bar" class="chat-search-bar hidden" role="search">
+        <input id="chat-search-input" type="text" placeholder="Search this conversation…" autocomplete="off" enterkeyhint="search" />
+        <span id="chat-search-count" class="chat-search-count" aria-live="polite"></span>
+        <button type="button" id="chat-search-prev" class="btn-icon" aria-label="Older match" title="Older match (Enter)">▲</button>
+        <button type="button" id="chat-search-next" class="btn-icon" aria-label="Newer match" title="Newer match (Shift+Enter)">▼</button>
+        <button type="button" id="chat-search-close" class="btn-icon" aria-label="Close search">✕</button>
+      </div>
+
       <div id="pinned-bar" class="pinned-bar hidden">
         📌 <span id="pinned-count">0 pinned messages</span>
       </div>
 
       <div id="message-log" class="message-log" aria-live="polite"></div>
 
-      <form id="message-form" class="message-form">
-        <button type="button" id="btn-attach-media" class="btn-icon" title="Send photo/video">🖼</button>
-        <button type="button" id="btn-attach-file" class="btn-icon" title="Send file">📎</button>
-        <button type="button" id="btn-emoji" class="btn-icon" title="Emoji">😊</button>
-        <button type="button" id="btn-gif" class="btn-icon" title="GIF">GIF</button>
-        <input id="message-input" type="text" placeholder="Type an encrypted message…" autocomplete="off" />
-        <button type="submit" class="btn-primary" disabled>Send</button>
+      <form id="message-form" class="message-form" autocomplete="off">
+        <button type="button" id="btn-tools" class="btn-icon tools-toggle" aria-expanded="false" aria-controls="composer-tools" aria-label="Attachments and tools" title="Attachments and tools">＋</button>
+        <div id="composer-tools" class="composer-tools">
+          <button type="button" id="btn-attach-media" class="btn-icon" title="Send photo/video"><span class="tool-ico">🖼</span><span class="tool-label">Photo / video</span></button>
+          <button type="button" id="btn-attach-file" class="btn-icon" title="Send file"><span class="tool-ico">📎</span><span class="tool-label">File</span></button>
+          <button type="button" id="btn-emoji" class="btn-icon" title="Emoji"><span class="tool-ico">😊</span><span class="tool-label">Emoji</span></button>
+          <button type="button" id="btn-gif" class="btn-icon" title="GIF"><span class="tool-ico">GIF</span><span class="tool-label">GIF</span></button>
+          <button type="button" id="btn-tool-search" class="btn-icon tray-only" title="Search in chat"><span class="tool-ico">🔎</span><span class="tool-label">Search chat</span></button>
+          <button type="button" id="btn-tool-lock" class="btn-icon tray-only" title="Vault Lock"><span class="tool-ico">🔐</span><span class="tool-label">Lock vault</span></button>
+        </div>
+        <textarea id="message-input" rows="1" placeholder="Type an encrypted message…" autocomplete="off" autocapitalize="sentences" spellcheck="true" enterkeyhint="enter"></textarea>
+        <button type="submit" class="btn-primary" aria-label="Send message" disabled>Send</button>
       </form>
       <input id="file-picker-images" type="file" accept="image/*,video/*" multiple class="hidden" />
       <input id="file-picker-files" type="file" multiple class="hidden" />
@@ -133,7 +171,23 @@
 
     <section id="no-chat-state" class="chat-pane chat-pane-placeholder">
       <button id="btn-menu-empty" class="btn-icon menu-btn menu-btn-floating" title="Contacts">☰</button>
-      <p>Select a contact to start an encrypted conversation.</p>
+      <div class="welcome-hud">
+        <p class="hud-greeting"><i class="hud-pulse"></i> <span data-hud="greeting">WELCOME</span> · SECURE LINK ONLINE</p>
+        <h2 class="hud-welcome" data-hud-welcome>WELCOME, OPERATOR</h2>
+        <div class="hud-ring" data-hud-ring>
+          <div class="hud-ring-core">
+            <div class="hud-time" data-hud="time" title="Tap to switch 12/24h">--:--:--</div>
+            <div class="hud-weekday" data-hud="weekday">—</div>
+            <div class="hud-date" data-hud="date">—</div>
+          </div>
+        </div>
+        <div class="hud-stats">
+          <div class="hud-stat"><span class="k">ZONE</span><span class="v" data-hud="tz">—</span></div>
+          <div class="hud-stat"><span class="k">LINK UPTIME</span><span class="v" data-hud="uptime">00:00:00</span></div>
+          <div class="hud-stat"><span class="k">CHANNEL</span><span class="v">E2E · AES-256</span></div>
+        </div>
+        <p class="welcome-hint">Select a contact to open an encrypted channel.</p>
+      </div>
     </section>
 
   </div>
@@ -179,29 +233,35 @@
         <button class="btn-icon" data-close-dialog>✕</button>
       </header>
       <div class="dialog-body">
-        <label class="field-label">Display name <span class="field-hint-inline">(shown to your contacts)</span></label>
-        <input id="account-displayname-input" type="text" minlength="1" maxlength="40" placeholder="e.g. Veus" />
-        <p id="account-displayname-status" class="field-status"></p>
-        <button id="btn-save-displayname" class="btn-secondary full-width">Save display name</button>
+        <form class="acct-group" autocomplete="off" novalidate>
+          <label class="field-label">Display name <span class="field-hint-inline">(shown to your contacts)</span></label>
+          <input id="account-displayname-input" type="text" minlength="1" maxlength="40" placeholder="e.g. Veus" autocomplete="off" />
+          <p id="account-displayname-status" class="field-status"></p>
+          <button type="button" id="btn-save-displayname" class="btn-secondary full-width">Save display name</button>
+        </form>
 
         <hr class="dialog-divider" />
 
-        <label class="field-label">Username <span class="field-hint-inline">(private handle, not shown to contacts)</span></label>
-        <input id="account-username-input" type="text" minlength="3" maxlength="30" placeholder="e.g. veus_alpha" />
-        <p id="account-username-status" class="field-status"></p>
-        <button id="btn-save-username" class="btn-secondary full-width">Save username</button>
+        <form class="acct-group" autocomplete="off" novalidate>
+          <label class="field-label">Username <span class="field-hint-inline">(private handle, not shown to contacts)</span></label>
+          <input id="account-username-input" type="text" minlength="3" maxlength="30" placeholder="e.g. veus_alpha" autocomplete="off" autocapitalize="none" spellcheck="false" />
+          <p id="account-username-status" class="field-status"></p>
+          <button type="button" id="btn-save-username" class="btn-secondary full-width">Save username</button>
+        </form>
 
         <hr class="dialog-divider" />
 
-        <label class="field-label" id="account-password-heading">Change password</label>
-        <p id="account-password-hint" class="field-hint hidden">
-          You signed in with Google and don't have a password yet — set one below so you can also sign in with your email.
-        </p>
-        <input id="account-current-password" type="password" placeholder="Current password" autocomplete="current-password" />
-        <input id="account-new-password" type="password" placeholder="New password (min. 6 characters)" autocomplete="new-password" />
-        <input id="account-confirm-password" type="password" placeholder="Confirm new password" autocomplete="new-password" />
-        <p id="account-password-status" class="field-status"></p>
-        <button id="btn-save-password" class="btn-secondary full-width">Save password</button>
+        <form class="acct-group" autocomplete="off" novalidate>
+          <label class="field-label" id="account-password-heading">Change password</label>
+          <p id="account-password-hint" class="field-hint hidden">
+            You signed in with Google and don't have a password yet — set one below so you can also sign in with your email.
+          </p>
+          <input id="account-current-password" type="password" placeholder="Current password" autocomplete="new-password" />
+          <input id="account-new-password" type="password" placeholder="New password (min. 6 characters)" autocomplete="new-password" />
+          <input id="account-confirm-password" type="password" placeholder="Confirm new password" autocomplete="new-password" />
+          <p id="account-password-status" class="field-status"></p>
+          <button type="button" id="btn-save-password" class="btn-secondary full-width">Save password</button>
+        </form>
       </div>
     </div>
   </div>
@@ -228,7 +288,7 @@
         <button class="btn-icon" data-close-dialog>✕</button>
       </header>
       <div class="dialog-body">
-        <input id="gif-search-input" type="text" placeholder="Search GIFs…" autocomplete="off" />
+        <input id="gif-search-input" type="text" placeholder="Search GIFs…" autocomplete="off" enterkeyhint="search" />
         <p id="gif-status" class="field-status"></p>
         <div id="gif-grid" class="gif-grid"></div>
       </div>
@@ -283,6 +343,56 @@
     </div>
   </div>
 
+  <!-- Vault Lock settings -->
+  <div id="lock-dialog" class="dialog-backdrop hidden">
+    <div class="dialog">
+      <header class="dialog-header">
+        <h3>🔐 Vault Lock</h3>
+        <button class="btn-icon" data-close-dialog>✕</button>
+      </header>
+      <div class="dialog-body">
+        <p id="lock-status" class="field-hint"></p>
+        <button id="btn-lock-setpin" class="btn-secondary full-width">Create PIN</button>
+        <div id="lock-options" class="lock-options hidden">
+          <label class="field-label" for="lock-timeout">Lock automatically</label>
+          <select id="lock-timeout" class="select-input">
+            <option value="0">When I leave the app</option>
+            <option value="60000">After 1 minute idle</option>
+            <option value="300000">After 5 minutes idle</option>
+            <option value="900000">After 15 minutes idle</option>
+            <option value="-1">Only when I lock it myself</option>
+          </select>
+          <label class="switch-row">
+            <span>Blur chats in the app switcher</span>
+            <input type="checkbox" id="lock-shield" />
+          </label>
+        </div>
+        <button id="btn-lock-now" class="btn-secondary full-width hidden">Lock now</button>
+        <button id="btn-lock-remove" class="btn-link danger hidden">Remove PIN</button>
+        <p class="field-hint">A screen lock for this device: it hides the app and asks for your PIN. It doesn't change how your messages are encrypted.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lock screen / PIN pad (also used to create, change and verify the PIN) -->
+  <div id="lock-screen" class="lock-screen hidden" role="dialog" aria-modal="true" aria-labelledby="lock-title">
+    <button id="lock-cancel" class="btn-icon lock-cancel hidden" aria-label="Cancel">✕</button>
+    <div class="lock-core">
+      <div class="lock-glyph" aria-hidden="true">◈</div>
+      <h2 id="lock-title" class="lock-title">VAULT SEALED</h2>
+      <p class="lock-sub"><span data-hud="greeting">WELCOME</span>, <b data-hud-name>Operator</b></p>
+      <div class="lock-time" data-hud="time">--:--:--</div>
+      <div class="lock-date"><span data-hud="weekday">—</span> · <span data-hud="date">—</span></div>
+      <div id="pin-dots" class="pin-dots" aria-hidden="true"></div>
+      <p id="lock-msg" class="lock-msg" aria-live="polite"></p>
+      <div id="keypad" class="keypad"></div>
+      <button id="btn-lock-signout" class="btn-link">Forgot PIN? Sign out</button>
+    </div>
+  </div>
+
+  <script type="module" src="noautofill.js"></script>
+  <script type="module" src="viewport.js"></script>
+  <script type="module" src="hud.js"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>
