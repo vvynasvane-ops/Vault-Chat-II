@@ -249,28 +249,23 @@ html.has-accent * { scrollbar-color: var(--cyan) transparent; }
 .dialog .era-btn { width: 100%; margin: 0; }
 .era-floating { position: fixed; top: max(12px, env(safe-area-inset-top, 0px)); right: 12px; width: auto; margin: 0; z-index: 30; }
 
-.era-warp {
-  position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
-  background: radial-gradient(circle at 50% 50%, #120a2e 0%, #02010a 75%);
-  color: #fff; opacity: 1; transition: opacity .5s ease; pointer-events: all; overflow: hidden;
+/* Smooth era change: a cross-dissolve of the whole page (View Transitions),
+   with a gentle colour morph as the fallback. No rings, no loops. */
+::view-transition-old(root) { animation: none; mix-blend-mode: normal; }
+::view-transition-new(root) { animation: era-dissolve 1s cubic-bezier(.4, 0, .2, 1) both; mix-blend-mode: normal; }
+@keyframes era-dissolve { from { opacity: 0; transform: scale(1.012); } to { opacity: 1; transform: none; } }
+html.era-morph, html.era-morph *, html.era-morph *::before, html.era-morph *::after {
+  transition: background-color .8s ease, color .8s ease, border-color .8s ease, box-shadow .8s ease, fill .8s ease, stroke .8s ease, outline-color .8s ease !important;
 }
-.era-warp.to-ancient { background: radial-gradient(circle at 50% 50%, #3a2508 0%, #0b0702 75%); }
-.era-warp.out { opacity: 0; pointer-events: none; }
-.era-warp-rings {
-  position: absolute; left: 50%; top: 50%; width: 140vmax; height: 140vmax; transform: translate(-50%, -50%);
-  background: repeating-radial-gradient(circle, transparent 0 5vmax, rgba(167,139,255,.35) 5vmax 5.3vmax);
-  animation: era-tunnel 1.2s linear infinite; opacity: .8;
+.era-pill {
+  position: fixed; left: 50%; top: calc(76px + env(safe-area-inset-top, 0px)); transform: translate(-50%, -10px); z-index: 9998;
+  padding: 10px 18px; border-radius: 999px; pointer-events: none; opacity: 0; white-space: nowrap;
+  font-family: var(--font-display); font-size: 12px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--text-primary); background: var(--bg-panel-raised); border: 1px solid var(--cyan); box-shadow: 0 0 30px -6px var(--cyan-glow);
+  transition: opacity .5s ease, transform .5s ease;
 }
-.era-warp.to-ancient .era-warp-rings { background: repeating-radial-gradient(circle, transparent 0 5vmax, rgba(227,176,75,.4) 5vmax 5.3vmax); }
-.era-warp.to-future .era-warp-rings { animation-direction: reverse; }
-@keyframes era-tunnel { from { transform: translate(-50%, -50%) scale(.55); } to { transform: translate(-50%, -50%) scale(1.15); } }
-.era-warp-year {
-  position: relative; font-family: var(--font-display); font-size: clamp(38px, 11vw, 96px); letter-spacing: .08em;
-  text-shadow: 0 0 40px var(--plasma-glow, rgba(167,139,255,.6)); font-variant-numeric: tabular-nums;
-}
-.era-warp.to-ancient .era-warp-year { color: #f2cf8e; text-shadow: 0 0 40px rgba(227,176,75,.7); }
-.era-warp-sub { position: relative; font-size: 14px; letter-spacing: .2em; text-transform: uppercase; opacity: .75; text-align: center; padding: 0 20px; }
-@media (prefers-reduced-motion: reduce) { .era-warp-rings { animation: none; } }
+.era-pill.show { opacity: 1; transform: translate(-50%, 0); }
+@media (prefers-reduced-motion: reduce) { ::view-transition-new(root) { animation: none; } .era-pill { transition: none; } }
 
 /* ── Ancient palette (night in the temple) ─────────────────────────── */
 :root[data-era="ancient"] {
@@ -394,8 +389,8 @@ html[data-era="ancient"]:not(.has-bubble-mine) .bubble.mine {
 
 :root { --wp-rgb: 8, 12, 20; --bubble-theirs-bg: rgba(24, 19, 58, .88); --bubble-theirs-text: var(--text-primary); }
 :root[data-theme="light"] { --wp-rgb: 244, 248, 251; --bubble-theirs-bg: rgba(255, 255, 255, .93); }
-:root[data-era="ancient"] { --bubble-theirs-bg: rgba(46, 34, 18, .9); }
-:root[data-era="ancient"][data-theme="light"] { --bubble-theirs-bg: rgba(250, 240, 214, .94); }
+:root[data-era="ancient"] { --bubble-theirs-bg: rgba(46, 34, 18, .9); --wp-rgb: 20, 12, 4; }
+:root[data-era="ancient"][data-theme="light"] { --bubble-theirs-bg: rgba(250, 240, 214, .94); --wp-rgb: 246, 234, 205; }
 
 /* Their bubbles always sit on a near-opaque backing, so wallpaper can't wash text out */
 html .bubble.theirs {
@@ -413,7 +408,25 @@ html.has-bubble-mine .bubble.mine {
 html.has-bubble-mine .bubble.mine .bubble-time { color: inherit; opacity: .7; }
 
 /* Wallpaper dimming layer: strength is measured/auto or set by the slider */
-html:root[data-theme] .message-log.has-wallpaper::before { background: rgba(var(--wp-rgb), var(--wp-scrim, .45)); }
+/* The old dimming layer was a ::before INSIDE the scrolling log, so it scrolled away
+   and left the picture bright. Now vignette + dimming + picture are one background
+   on the log's own box, which never scrolls with the messages. */
+html:root .message-log.has-wallpaper::before { display: none !important; }
+html:root .message-log.has-wallpaper {
+  background-image:
+    radial-gradient(130% 100% at 50% 45%, transparent 50%, rgba(var(--wp-rgb), .4) 100%),
+    linear-gradient(rgba(var(--wp-rgb), var(--wp-scrim, .45)), rgba(var(--wp-rgb), var(--wp-scrim, .45))),
+    var(--wp-image, none) !important;
+  background-size: cover, cover, cover !important;
+  background-position: center, center, center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: scroll, scroll, scroll !important;
+}
+
+/* The ＋ tray lives inside the message bar; lift the whole bar above the bubbles
+   (they sit at z-index:1) and give the tray a solid base so nothing shows through. */
+.message-form { position: relative; z-index: 35; }
+.composer-tools { background: linear-gradient(var(--bg-panel-raised), var(--bg-panel-raised)), var(--bg-void) !important; }
 
 /* Chat tint wash (no wallpaper) + header/composer edge light */
 html.has-chat-tint .message-log:not(.has-wallpaper) {

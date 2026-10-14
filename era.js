@@ -6,6 +6,8 @@
 // time-travel button. The choice is kept in localStorage ("vc_era") so it is
 // applied on the very next load, and it syncs across open tabs.
 
+import { loadAppearance, applyAppearance } from "./appearance.js";
+
 const KEY = "vc_era";
 const YEAR_FUTURE = 7026;
 const YEAR_ANCIENT = -2974; // 5,000 years before 2026
@@ -30,7 +32,7 @@ function storeEra(era) {
 
 function fmtYear(y) {
   const r = Math.round(y);
-  return r > 0 ? `${r} CE` : `${1 - r > 0 ? 1 - r : 1} BCE`;
+  return r > 0 ? `${r} CE` : `${Math.max(1, -r)} BCE`;
 }
 
 // Flavour text that changes with the era. Originals are remembered and
@@ -94,82 +96,85 @@ function apply(era) {
   document.querySelectorAll('meta[name="theme-color"]').forEach((m) => {
     m.setAttribute("content", ancient ? "#15100a" : "#05040d");
   });
-  // Fonts follow the era unless a specific family was picked (chat page only).
-  if (document.getElementById("app-shell")) {
-    import("./appearance.js")
-      .then((m) => m.loadAppearance().then((s) => m.applyAppearance(s)))
-      .catch(() => {});
-  }
   window.dispatchEvent(new CustomEvent("eraChanged", { detail: { era: root.dataset.era } }));
 }
 
-// The "wormhole": a full-screen year counter that spins through the centuries,
-// swaps the theme while the screen is covered, then fades away.
-function warp(toEra) {
+// Fonts and accent-derived colours follow the era (chat page only).
+async function refreshAppearance() {
+  if (!document.getElementById("app-shell")) return;
+  try {
+    applyAppearance(await loadAppearance());
+  } catch (_) {}
+}
+
+// A small pill that fades in and out after the change: "2974 BCE · Ancient mode".
+function showPill(era) {
+  document.querySelectorAll(".era-pill").forEach((n) => n.remove());
+  const pill = document.createElement("div");
+  pill.className = "era-pill";
+  pill.setAttribute("aria-hidden", "true");
+  pill.textContent = era === "ancient" ? `${fmtYear(YEAR_ANCIENT)} · Ancient mode` : `${fmtYear(YEAR_FUTURE)} · Future mode`;
+  document.body.appendChild(pill);
+  requestAnimationFrame(() => requestAnimationFrame(() => pill.classList.add("show")));
+  setTimeout(() => pill.classList.remove("show"), 1700);
+  setTimeout(() => pill.remove(), 2400);
+}
+
+// Smooth change: the browser snapshots the old page, we swap the theme
+// underneath, and the new page dissolves in over it (no rings, no loops).
+// Browsers without View Transitions get a gentle colour morph instead.
+function travel(toEra) {
   if (busy) return;
   busy = true;
-  const toAncient = toEra === "ancient";
-  const from = toAncient ? YEAR_FUTURE : YEAR_ANCIENT;
-  const to = toAncient ? YEAR_ANCIENT : YEAR_FUTURE;
+
+  const swap = async () => {
+    try {
+      storeEra(toEra);
+      apply(toEra);
+      await refreshAppearance();
+    } catch (err) {
+      console.warn("Era switch problem:", err);
+    }
+  };
+  const finish = () => {
+    root.classList.remove("era-morph");
+    busy = false;
+    showPill(toEra);
+  };
 
   if (reduceMotion()) {
-    storeEra(toEra);
-    apply(toEra);
-    busy = false;
+    swap().finally(() => {
+      busy = false;
+    });
     return;
   }
 
-  const o = document.createElement("div");
-  o.className = `era-warp ${toAncient ? "to-ancient" : "to-future"}`;
-  o.setAttribute("aria-hidden", "true");
-  o.innerHTML =
-    '<div class="era-warp-rings"></div>' +
-    '<div class="era-warp-year"></div>' +
-    '<div class="era-warp-sub"></div>';
-  document.body.appendChild(o);
-  const yearEl = o.querySelector(".era-warp-year");
-  const subEl = o.querySelector(".era-warp-sub");
-  subEl.textContent = toAncient
-    ? "Travelling 10,000 years into the past…"
-    : "Returning to the future…";
-  yearEl.textContent = fmtYear(from);
-
-  const DURATION = 1700;
-  const start = performance.now();
-  let swapped = false;
-
-  function step(now) {
-    const t = Math.min(1, (now - start) / DURATION);
-    const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; // easeInOutCubic
-    yearEl.textContent = fmtYear(from + (to - from) * e);
-    if (!swapped && t >= 0.55) {
-      swapped = true;
-      storeEra(toEra);
-      apply(toEra);
-    }
-    if (t < 1) {
-      requestAnimationFrame(step);
-    } else {
-      yearEl.textContent = fmtYear(to);
-      o.classList.add("out");
-      setTimeout(() => {
-        o.remove();
-        busy = false;
-      }, 520);
+  if (typeof document.startViewTransition === "function") {
+    try {
+      const vt = document.startViewTransition(swap);
+      vt.finished.catch(() => {}).finally(finish);
+      return;
+    } catch (_) {
+      /* fall through to the morph */
     }
   }
-  requestAnimationFrame(step);
+
+  root.classList.add("era-morph");
+  swap().finally(() => setTimeout(finish, 900));
 }
 
 document.addEventListener("click", (e) => {
   const btn = e.target.closest && e.target.closest("[data-era-toggle]");
   if (!btn) return;
   e.preventDefault();
-  warp(root.dataset.era === "ancient" ? "future" : "ancient");
+  travel(root.dataset.era === "ancient" ? "future" : "ancient");
 });
 
 window.addEventListener("storage", (e) => {
-  if (e.key === KEY && !busy) apply(getStoredEra());
+  if (e.key === KEY && !busy) {
+    apply(getStoredEra());
+    refreshAppearance();
+  }
 });
 
 apply(getStoredEra());

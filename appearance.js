@@ -213,6 +213,24 @@ const CHAT_VARS = [
   "--bubble-theirs-bg", "--bubble-theirs-text", "--chat-tint-rgb", "--wp-rgb",
 ];
 
+const contrast = (a, b) => {
+  const [hi, lo] = [relLum(a), relLum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+};
+const hexToRgb = (h) => parseHex(h) || [255, 255, 255];
+
+// Nudge both gradient ends until the text reaches WCAG AA (4.5:1) on each.
+function ensureContrast(c1, c2, textHex) {
+  const text = hexToRgb(textHex);
+  const darkenText = textHex === "#ffffff";
+  for (let i = 0; i < 8; i++) {
+    if (contrast(c1, text) >= 4.5 && contrast(c2, text) >= 4.5) break;
+    c1 = darkenText ? scale(c1, 0.88) : toward(c1, [255, 255, 255], 0.2);
+    c2 = darkenText ? scale(c2, 0.88) : toward(c2, [255, 255, 255], 0.2);
+  }
+  return [c1, c2];
+}
+
 export function applyChatTheme(settings) {
   const root = document.documentElement;
   const light = settings.theme === "light";
@@ -222,12 +240,13 @@ export function applyChatTheme(settings) {
   const fromAccent = parseHex(settings.accent);
   const mine = custom || fromAccent;
   if (mine) {
-    const c1 = custom ? mine : scale(mine, 0.82);
-    const c2 = custom ? scale(mine, 0.55) : scale(mine, 0.5);
-    const mid = scale(mine, custom ? 0.78 : 0.66);
+    let c1 = custom ? mine : scale(mine, 0.72);
+    let c2 = custom ? scale(mine, 0.55) : scale(mine, 0.45);
+    const textHex = textOn(scale(mine, custom ? 0.78 : 0.58));
+    [c1, c2] = ensureContrast(c1, c2, textHex);
     root.style.setProperty("--bubble-mine-1", `rgb(${c1.join(",")})`);
     root.style.setProperty("--bubble-mine-2", `rgb(${c2.join(",")})`);
-    root.style.setProperty("--bubble-mine-text", textOn(mid));
+    root.style.setProperty("--bubble-mine-text", textHex);
     root.style.setProperty("--bubble-mine-glow", `rgba(${mine.join(",")}, 0.55)`);
     root.classList.add("has-bubble-mine");
   } else {
@@ -272,9 +291,9 @@ export function updateScrim() {
   if (Number.isFinite(manual)) {
     v = manual / 100;
   } else if (s.theme === "light") {
-    v = 0.45 + (1 - wallLum) * 0.4; // dark photo on a light UI → lighten more
+    v = 0.4 + (1 - wallLum) * 0.35; // dark photo on a light UI → lighten more
   } else {
-    v = 0.38 + wallLum * 0.47; // bright photo on a dark UI → darken more
+    v = 0.3 + wallLum * 0.4; // bright photo on a dark UI → darken more
   }
   root.style.setProperty("--wp-scrim", String(Math.max(0, Math.min(0.9, v)).toFixed(2)));
 }
@@ -322,6 +341,10 @@ export async function applyWallpaper(key, targetEl) {
       const prev = targetEl._wpUrl;
       targetEl.style.backgroundImage = `url(${url})`;
       targetEl.classList.add("has-wallpaper");
+      // The chat log layers [vignette + dimming + image] in one background (see
+      // future.css). A background belongs to the box, not the scrolling
+      // content, so the dimming can never scroll away from the picture.
+      targetEl.style.setProperty("--wp-image", `url("${url}")`);
       targetEl._wpUrl = url;
       if (prev) setTimeout(() => URL.revokeObjectURL(prev), 1000); // don't leak old images
       if (targetEl.classList.contains("message-log")) {
@@ -336,6 +359,7 @@ export async function applyWallpaper(key, targetEl) {
     await clearWallpaper(key).catch(() => {});
   }
   targetEl.style.backgroundImage = "";
+  targetEl.style.removeProperty("--wp-image");
   targetEl.classList.remove("has-wallpaper");
   if (targetEl._wpUrl) {
     URL.revokeObjectURL(targetEl._wpUrl);
