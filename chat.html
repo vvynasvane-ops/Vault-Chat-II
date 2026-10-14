@@ -10,19 +10,19 @@
 <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
 <link rel="icon" type="image/svg+xml" href="icon.svg" />
-<link rel="mask-icon" href="safari-pinned-tab.svg" color="#e2b24c" />
+<link rel="mask-icon" href="safari-pinned-tab.svg" color="#a78bff" />
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
 <link rel="apple-touch-icon" sizes="167x167" href="apple-touch-icon-167.png" />
 <link rel="apple-touch-icon" sizes="152x152" href="apple-touch-icon-152.png" />
 <link rel="manifest" href="site.webmanifest" />
 <meta name="msapplication-config" content="browserconfig.xml" />
-<meta name="theme-color" content="#170f08" />
+<meta name="theme-color" content="#05040d" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
 <link rel="stylesheet" href="style.css" />
-<link rel="stylesheet" href="ancient.css" />
+<link rel="stylesheet" href="future.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet" />
 </head>
@@ -32,7 +32,7 @@
   <!-- Boot splash: plays once per browser session -->
   <div id="boot-splash" class="boot-splash hidden" aria-hidden="true">
     <div class="boot-core">
-      <div class="boot-glyph">𒀭</div>
+      <div class="boot-glyph">◈</div>
       <div class="boot-title">VAULT<span>CHATT</span> II</div>
       <div class="boot-lines"></div>
       <div class="boot-skip">tap to skip</div>
@@ -222,6 +222,22 @@
         <div id="font-color-grid" class="color-grid"></div>
 
         <button id="btn-reset-appearance" class="btn-secondary full-width">Reset text style to default</button>
+
+        <hr class="dialog-divider" />
+
+        <label class="field-label">Accent colour <span class="field-hint-inline">(RGB mixer — tints the whole app live)</span></label>
+        <div class="rgb-mixer">
+          <div class="rgb-preview-row">
+            <div id="rgb-preview" class="rgb-preview" aria-hidden="true"></div>
+            <input id="rgb-hex" class="rgb-hex" type="text" maxlength="7" spellcheck="false" autocomplete="off" autocapitalize="none" aria-label="Hex colour" placeholder="#6ff2dc" />
+            <input id="rgb-native" class="rgb-native" type="color" value="#6ff2dc" aria-label="Pick a colour" title="Open colour wheel" />
+          </div>
+          <label class="rgb-row"><span class="rgb-chan r">R</span><input id="rgb-r" class="rgb-slider rgb-r" type="range" min="0" max="255" value="111" /><output id="rgb-r-val">111</output></label>
+          <label class="rgb-row"><span class="rgb-chan g">G</span><input id="rgb-g" class="rgb-slider rgb-g" type="range" min="0" max="255" value="242" /><output id="rgb-g-val">242</output></label>
+          <label class="rgb-row"><span class="rgb-chan b">B</span><input id="rgb-b" class="rgb-slider rgb-b" type="range" min="0" max="255" value="220" /><output id="rgb-b-val">220</output></label>
+          <div id="rgb-presets" class="color-grid" aria-label="Neon presets"></div>
+          <button id="btn-reset-accent" type="button" class="btn-secondary full-width">Reset accent colour</button>
+        </div>
       </div>
     </div>
   </div>
@@ -379,7 +395,7 @@
   <div id="lock-screen" class="lock-screen hidden" role="dialog" aria-modal="true" aria-labelledby="lock-title">
     <button id="lock-cancel" class="btn-icon lock-cancel hidden" aria-label="Cancel">✕</button>
     <div class="lock-core">
-      <div class="lock-glyph" aria-hidden="true">𒀭</div>
+      <div class="lock-glyph" aria-hidden="true">◈</div>
       <h2 id="lock-title" class="lock-title">VAULT SEALED</h2>
       <p class="lock-sub"><span data-hud="greeting">WELCOME</span>, <b data-hud-name>Operator</b></p>
       <div class="lock-time" data-hud="time">--:--:--</div>

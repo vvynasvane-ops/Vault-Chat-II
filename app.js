@@ -64,6 +64,9 @@ import {
   FONT_FAMILIES,
   FONT_WEIGHTS,
   FONT_COLORS,
+  applyAccent,
+  parseHex,
+  rgbToHex,
   setWallpaper,
   clearWallpaper,
   applyWallpaper,
@@ -1424,6 +1427,7 @@ function setupAppearancePanel() {
     saveAppearance({ fontSizePct: Number(sizeSlider.value) });
   });
   resetBtn.addEventListener("click", () => resetAppearanceText().then(reflect));
+  setupAccentMixer();
 
   async function reflect() {
     const s = await loadAppearance();
@@ -1437,6 +1441,97 @@ function setupAppearancePanel() {
     });
   }
   reflect();
+}
+
+// ─── Accent colour: RGB mixer ────────────────────────────────────────────
+
+function setupAccentMixer() {
+  const PRESETS = ["#6ff2dc", "#00e5ff", "#a78bff", "#ff5c8a", "#ffd48a", "#7dff6b", "#ff8a3d", "#4d7cff"];
+  const $ = (id) => document.getElementById(id);
+  const sl = { r: $("rgb-r"), g: $("rgb-g"), b: $("rgb-b") };
+  const out = { r: $("rgb-r-val"), g: $("rgb-g-val"), b: $("rgb-b-val") };
+  const preview = $("rgb-preview");
+  const hexInput = $("rgb-hex");
+  const nativeInput = $("rgb-native");
+  const presetBox = $("rgb-presets");
+  const resetAccent = $("btn-reset-accent");
+  if (!preview || !hexInput || !sl.r || !sl.g || !sl.b || !presetBox) return;
+
+  let saveTimer = null;
+
+  function paint(hex, { fromHexField = false } = {}) {
+    const rgb = parseHex(hex);
+    if (!rgb) return;
+    const clean = rgbToHex(...rgb);
+    ["r", "g", "b"].forEach((k, i) => {
+      sl[k].value = rgb[i];
+      out[k].textContent = rgb[i];
+    });
+    preview.style.background = clean;
+    nativeInput.value = clean;
+    if (!fromHexField) hexInput.value = clean;
+    // Tracks show what the other two channels would produce
+    sl.r.style.background = `linear-gradient(90deg, rgb(0,${rgb[1]},${rgb[2]}), rgb(255,${rgb[1]},${rgb[2]}))`;
+    sl.g.style.background = `linear-gradient(90deg, rgb(${rgb[0]},0,${rgb[2]}), rgb(${rgb[0]},255,${rgb[2]}))`;
+    sl.b.style.background = `linear-gradient(90deg, rgb(${rgb[0]},${rgb[1]},0), rgb(${rgb[0]},${rgb[1]},255))`;
+    return clean;
+  }
+
+  function live(hex, opts) {
+    const clean = paint(hex, opts);
+    if (!clean) return;
+    applyAccent(clean, document.documentElement.dataset.theme);
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveAppearance({ accent: clean }).catch(() => {}), 250);
+    markPreset(clean);
+  }
+
+  function markPreset(hex) {
+    presetBox.querySelectorAll(".color-swatch").forEach((sw) =>
+      sw.classList.toggle("selected", sw.dataset.value === hex)
+    );
+  }
+
+  PRESETS.forEach((hex) => {
+    const sw = document.createElement("button");
+    sw.type = "button";
+    sw.className = "color-swatch";
+    sw.dataset.value = hex;
+    sw.title = hex;
+    sw.style.background = hex;
+    sw.addEventListener("click", () => live(hex));
+    presetBox.appendChild(sw);
+  });
+
+  const onSlider = () => live(rgbToHex(sl.r.value, sl.g.value, sl.b.value));
+  ["r", "g", "b"].forEach((k) => sl[k].addEventListener("input", onSlider));
+
+  hexInput.addEventListener("input", () => {
+    const v = hexInput.value.trim();
+    const full = v.startsWith("#") ? v : `#${v}`;
+    if (parseHex(full)) live(full, { fromHexField: true });
+  });
+  hexInput.addEventListener("blur", () => {
+    hexInput.value = rgbToHex(sl.r.value, sl.g.value, sl.b.value);
+  });
+  nativeInput.addEventListener("input", () => live(nativeInput.value));
+
+  resetAccent.addEventListener("click", async () => {
+    clearTimeout(saveTimer);
+    await saveAppearance({ accent: "" });
+    const hex = getComputedStyle(document.documentElement).getPropertyValue("--cyan").trim();
+    paint(parseHex(hex) ? hex : "#6ff2dc");
+    markPreset("");
+  });
+
+  loadAppearance().then((s) => {
+    if (s.accent && parseHex(s.accent)) {
+      paint(s.accent);
+      markPreset(s.accent.toLowerCase());
+    } else {
+      paint("#6ff2dc");
+    }
+  });
 }
 
 // ─── Account settings: username + password (Section 13) ────────────────

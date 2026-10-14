@@ -176,3 +176,61 @@ input:focus, textarea:focus, .select-input:focus {
 * { scrollbar-width: thin; scrollbar-color: var(--plasma) transparent; }
 
 @media (prefers-reduced-motion: reduce) { .hex-field { animation: none; } }
+
+
+/* ── Fix: chat ⋮ menu was painted underneath the message layer ─────────
+   Message children are positioned with z-index:1 and the header (backdrop-filter)
+   had none, so the dropdown sat behind them. Lift the header above everything
+   in the chat pane. */
+.chat-pane { position: relative; }
+.chat-header { position: relative; z-index: 40; overflow: visible; }
+.chat-header .menu-anchor { z-index: 41; }
+.chat-header .dropdown-menu {
+  z-index: 60;
+  max-height: min(70vh, 420px);
+  overflow-y: auto;
+  max-width: calc(100vw - 24px);
+  background: var(--bg-panel-raised);
+}
+.chat-header .dropdown-item { white-space: nowrap; }
+.pinned-bar, .chat-search-bar { position: relative; z-index: 5; }
+
+/* ── RGB accent mixer ──────────────────────────────────────────────── */
+.rgb-mixer { display: flex; flex-direction: column; gap: 10px; }
+.rgb-preview-row { display: flex; align-items: center; gap: 10px; }
+.rgb-preview {
+  flex: 0 0 44px; height: 44px; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--cyan); box-shadow: 0 0 22px -4px var(--cyan-glow);
+}
+.rgb-hex {
+  flex: 1; min-width: 0; font-family: var(--font-display); letter-spacing: .12em; text-transform: lowercase;
+  background: rgba(0,0,0,.25); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); padding: 10px 12px;
+}
+.rgb-hex:focus { outline: none; border-color: var(--cyan); }
+.rgb-native { flex: 0 0 44px; width: 44px; height: 44px; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: none; cursor: pointer; }
+.rgb-row { display: flex; align-items: center; gap: 10px; }
+.rgb-chan { width: 18px; font-family: var(--font-display); font-size: 12px; font-weight: 700; }
+.rgb-chan.r { color: #ff5c5c; } .rgb-chan.g { color: #5cff8a; } .rgb-chan.b { color: #5c9bff; }
+.rgb-row output { width: 32px; text-align: right; font-family: var(--font-display); font-size: 12px; color: var(--text-dim); }
+.rgb-slider {
+  -webkit-appearance: none; appearance: none; flex: 1; min-width: 0; height: 10px; border-radius: 999px;
+  border: 1px solid var(--border); outline: none; cursor: pointer;
+}
+.rgb-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 22px; height: 22px; border-radius: 50%;
+  background: #fff; border: 2px solid var(--cyan); box-shadow: 0 0 10px var(--cyan-glow);
+}
+.rgb-slider::-moz-range-thumb {
+  width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 2px solid var(--cyan); box-shadow: 0 0 10px var(--cyan-glow);
+}
+.rgb-slider.rgb-r { background: linear-gradient(90deg, #000, #f00); }
+.rgb-slider.rgb-g { background: linear-gradient(90deg, #000, #0f0); }
+.rgb-slider.rgb-b { background: linear-gradient(90deg, #000, #00f); }
+
+/* Accent also tints your own chat bubbles */
+html.has-accent .bubble.mine {
+  border-color: rgba(var(--accent-rgb), .6);
+  background: linear-gradient(135deg, rgba(var(--accent-rgb), .5), rgba(var(--accent-rgb), .16));
+  box-shadow: 0 10px 30px -12px rgba(var(--accent-rgb), .6), 0 0 0 1px rgba(255,255,255,.05) inset;
+}
+html.has-accent * { scrollbar-color: var(--cyan) transparent; }

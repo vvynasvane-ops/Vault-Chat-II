@@ -47,6 +47,7 @@ const DEFAULTS = {
   fontWeight: "Regular",
   fontSizePct: 100, // 85–135
   fontColor: "", // "" = no override, keep each screen's own color
+  accent: "", // "" = theme default; otherwise "#rrggbb" from the RGB mixer
 };
 
 let cache = null;
@@ -86,6 +87,47 @@ export function applyAppearance(settings) {
   root.style.setProperty("--user-font-scale", String(Math.max(0.85, Math.min(1.35, settings.fontSizePct / 100))));
   root.style.setProperty("--user-font-color", settings.fontColor || "inherit");
   root.classList.toggle("font-color-override", !!settings.fontColor);
+  applyAccent(settings.accent, settings.theme);
+}
+
+// ─── Accent colour (RGB mixer) ───────────────────────────────────────────
+// One colour drives the glow/border/highlight variables, so every screen
+// re-tints live. An empty value removes the overrides and the theme's own
+// palette comes back untouched.
+
+const ACCENT_VARS = ["--cyan", "--cyan-dim", "--cyan-glow", "--border", "--plasma-glow", "--accent-rgb"];
+
+export function parseHex(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+export function rgbToHex(r, g, b) {
+  const c = (v) => Math.max(0, Math.min(255, Math.round(Number(v) || 0))).toString(16).padStart(2, "0");
+  return `#${c(r)}${c(g)}${c(b)}`;
+}
+
+export function applyAccent(hex, theme) {
+  const root = document.documentElement;
+  const rgb = parseHex(hex);
+  if (!rgb) {
+    ACCENT_VARS.forEach((v) => root.style.removeProperty(v));
+    root.classList.remove("has-accent");
+    return;
+  }
+  // Light mode needs a deeper tone to stay readable on white panels.
+  const k = theme === "light" ? 0.78 : 1;
+  const [r, g, b] = rgb.map((c) => Math.round(c * k));
+  const [dr, dg, db] = [r, g, b].map((c) => Math.round(c * 0.62));
+  root.style.setProperty("--cyan", `rgb(${r}, ${g}, ${b})`);
+  root.style.setProperty("--cyan-dim", `rgb(${dr}, ${dg}, ${db})`);
+  root.style.setProperty("--cyan-glow", `rgba(${r}, ${g}, ${b}, 0.38)`);
+  root.style.setProperty("--border", `rgba(${r}, ${g}, ${b}, 0.26)`);
+  root.style.setProperty("--plasma-glow", `rgba(${r}, ${g}, ${b}, 0.45)`);
+  root.style.setProperty("--accent-rgb", `${r}, ${g}, ${b}`);
+  root.classList.add("has-accent");
 }
 
 export async function initAppearance() {
