@@ -25,10 +25,12 @@ import {
   set,
   remove,
   onChildAdded,
+  onValue,
   off,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 import { rtdb } from "./firebase-config.js";
 import { idb } from "./idb.js";
+import { createOutbox } from "./outbox.js";
 import {
   deriveSharedKey,
   encryptText,
@@ -56,6 +58,95 @@ async function mailbox(recipientUid, messageId, payload) {
   await set(ref(rtdb, `${MESSAGES_PATH}/${recipientUid}/${messageId}`), payload);
 }
 
+// ─── Connectivity + outbox (resend what couldn't go out) ────────────────
+
+let rtdbConnected = null; // null until Firebase tells us
+const connectionListeners = new Set();
+let connectionWatchStarted = false;
+
+export function isOnline() {
+  const browserOnline = typeof navigator === "undefined" || navigator.onLine !== false;
+  return browserOnline && rtdbConnected !== false;
+}
+
+export function watchConnection(cb) {
+  connectionListeners.add(cb);
+  if (!connectionWatchStarted) {
+    connectionWatchStarted = true;
+    const emit = () => connectionListeners.forEach((fn) => { try { fn(isOnline()); } catch (_) {} });
+    try {
+      onValue(ref(rtdb, ".info/connected"), (snap) => {
+        rtdbConnected = snap.val() === true;
+        emit();
+      });
+    } catch (_) {}
+    if (typeof window !== "undefined") {
+      window.addEventListener("online", emit);
+      window.addEventListener("offline", emit);
+    }
+  }
+  return () => connectionListeners.delete(cb);
+}
+
+let statusListener = null;
+export function setSendStatusListener(fn) {
+  statusListener = fn;
+}
+
+// Builds the encrypted payload for a message that is already stored locally
+// and puts it in the recipient's mailbox. Always reads the CURRENT stored
+// content, so an edit made while waiting is what finally gets sent.
+async function transmitStored(msg, ctx) {
+  const aesKey = await deriveSharedKey(ctx.publicKeyBase64);
+  if (msg.messageType === "TEXT") {
+    const encryptedContent = await encryptText(aesKey, msg.content);
+    await mailbox(msg.receiverId, msg.messageId, {
+      messageId: msg.messageId,
+      senderId: msg.senderId,
+      encryptedContent,
+      type: "TEXT",
+      timestamp: msg.timestamp,
+    });
+    return;
+  }
+  const blob = await idb.get("media", msg.messageId);
+  if (!blob) throw new Error("This attachment is no longer stored on this device.");
+  const rawBytes = new Uint8Array(await blob.arrayBuffer());
+  const encryptedBytes = await encryptBytes(aesKey, rawBytes);
+  await mailbox(msg.receiverId, msg.messageId, {
+    messageId: msg.messageId,
+    senderId: msg.senderId,
+    // `type` matches the RTDB rules' validated set directly (IMAGE|VIDEO|FILE|AUDIO)
+    type: msg.messageType,
+    fileName: msg.fileName,
+    mimeType: msg.mimeType || "application/octet-stream",
+    fileSize: msg.fileSize,
+    encryptedMedia: toBase64(encryptedBytes),
+    timestamp: msg.timestamp,
+  });
+}
+
+const outbox = createOutbox({
+  transmit: transmitStored,
+  isOnline,
+  onStatus: (m) => {
+    if (statusListener) {
+      try { statusListener(m); } catch (_) {}
+    }
+  },
+});
+
+export async function resendMessage(messageId, theirPublicKeyBase64) {
+  return outbox.attempt(messageId, { publicKeyBase64: theirPublicKeyBase64 }, { manual: true });
+}
+export const recoverStuckMessages = () => outbox.recoverStuck();
+export const countPendingMessages = () => outbox.count();
+export const flushOutbox = (resolveKey, opts) =>
+  outbox.flush(async (m) => {
+    const key = await resolveKey(m);
+    return key ? { publicKeyBase64: key } : null;
+  }, opts);
+
 // ─── Send: text (Section 3) ──────────────────────────────────────────────
 
 export async function sendText(myUid, recipientUid, theirPublicKeyBase64, plaintext) {
@@ -79,24 +170,10 @@ export async function sendText(myUid, recipientUid, theirPublicKeyBase64, plaint
   };
   await idb.put("messages", localMessage);
 
-  try {
-    const aesKey = await deriveSharedKey(theirPublicKeyBase64);
-    const encryptedContent = await encryptText(aesKey, plaintext);
-    await mailbox(recipientUid, messageId, {
-      messageId,
-      senderId: myUid,
-      encryptedContent,
-      type: "TEXT",
-      timestamp,
-    });
-    localMessage.status = "SENT";
-  } catch (err) {
-    localMessage.status = "FAILED";
-    await idb.put("messages", localMessage);
-    throw err;
-  }
-  await idb.put("messages", localMessage);
-  return localMessage;
+  // Never throws for network trouble: offline → QUEUED (auto-sends later),
+  // rejected → FAILED (tap to retry). Either way the bubble stays in the chat.
+  const done = await outbox.attempt(messageId, { publicKeyBase64: theirPublicKeyBase64 }, { manual: true });
+  return done || localMessage;
 }
 
 export async function sendKeyExchange(myUid, recipientUid, myPublicKeyBase64) {
@@ -158,30 +235,8 @@ export async function sendMediaFile(myUid, recipientUid, theirPublicKeyBase64, f
   };
   await idb.put("messages", localMessage);
 
-  try {
-    const aesKey = await deriveSharedKey(theirPublicKeyBase64);
-    const rawBytes = new Uint8Array(await file.arrayBuffer());
-    const encryptedBytes = await encryptBytes(aesKey, rawBytes);
-    await mailbox(recipientUid, messageId, {
-      messageId,
-      senderId: myUid,
-      // `type` matches the RTDB rules' validated set directly
-      // (IMAGE|VIDEO|FILE|AUDIO) — no separate "MEDIA" wrapper type.
-      type: mediaType,
-      fileName: file.name,
-      mimeType: file.type || "application/octet-stream",
-      fileSize: file.size,
-      encryptedMedia: toBase64(encryptedBytes),
-      timestamp,
-    });
-    localMessage.status = "SENT";
-  } catch (err) {
-    localMessage.status = "FAILED";
-    await idb.put("messages", localMessage);
-    throw err;
-  }
-  await idb.put("messages", localMessage);
-  return localMessage;
+  const done = await outbox.attempt(messageId, { publicKeyBase64: theirPublicKeyBase64 }, { manual: true });
+  return done || localMessage;
 }
 
 // ─── Edit & delete, synced both ends (Section 5) ─────────────────────────
@@ -260,8 +315,16 @@ export function startInbox(myUid, handlers) {
     const msg = snapshot.val();
     const nodeRef = ref(rtdb, `${MESSAGES_PATH}/${myUid}/${snapshot.key}`);
 
+    // A retry of something we already stored (the sender didn't see our
+    // delivery receipt in time) must not create a second copy.
+    const isDup =
+      ["TEXT", "IMAGE", "VIDEO", "AUDIO", "FILE"].includes(msg.type) &&
+      !!(await idb.get("messages", msg.messageId).catch(() => null));
+
     try {
-      if (msg.type === "KEY_EXCHANGE") {
+      if (isDup) {
+        // already have it — just clear the mailbox node below
+      } else if (msg.type === "KEY_EXCHANGE") {
         handlers.onKeyExchange && (await handlers.onKeyExchange(msg));
       } else if (msg.type === "DELIVERY_ACK") {
         handlers.onDeliveryAck && (await handlers.onDeliveryAck(msg.targetMessageId));

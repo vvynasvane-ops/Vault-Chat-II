@@ -152,6 +152,12 @@
         📌 <span id="pinned-count">0 pinned messages</span>
       </div>
 
+      <div id="outbox-bar" class="outbox-bar hidden" role="status" aria-live="polite">
+        <span id="outbox-icon" class="outbox-icon" aria-hidden="true">📡</span>
+        <span id="outbox-text" class="outbox-text"></span>
+        <button type="button" id="outbox-send" class="btn-secondary outbox-send hidden">Send now</button>
+      </div>
+
       <div id="message-log" class="message-log" aria-live="polite"></div>
 
       <form id="message-form" class="message-form" autocomplete="off">

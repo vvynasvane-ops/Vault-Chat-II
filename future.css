@@ -522,3 +522,24 @@ select option:checked, select option:hover {
 .font-ratio.bad { color: var(--danger); }
 .rgb-targets { min-width: 0; }
 .rgb-tab { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+
+/* ── Outbox: resend what couldn't go out ───────────────────────────── */
+.outbox-bar {
+  display: flex; align-items: center; gap: 10px; padding: 8px 14px; font-size: 13px; line-height: 1.3;
+  color: var(--text-primary); border-bottom: 1px solid var(--border); position: relative; z-index: 6;
+  background: linear-gradient(90deg, rgba(255, 190, 80, .16), transparent);
+}
+.outbox-bar.hidden { display: none; }
+.outbox-bar.offline { background: linear-gradient(90deg, rgba(255, 190, 80, .2), rgba(255, 190, 80, .04)); border-bottom-color: rgba(255, 190, 80, .45); }
+.outbox-bar.pending { background: linear-gradient(90deg, rgba(var(--accent-rgb, 111, 242, 220), .18), transparent); border-bottom-color: var(--cyan); }
+.outbox-bar.ok { background: linear-gradient(90deg, rgba(100, 220, 140, .24), transparent); border-bottom-color: var(--online); }
+.outbox-icon { flex: 0 0 auto; }
+.outbox-text { flex: 1 1 auto; min-width: 0; }
+.outbox-send { flex: 0 0 auto; padding: 6px 14px; font-size: 12px; }
+.status-queued, .status-failed { cursor: pointer; display: inline-block; }
+.status-queued { animation: queued-pulse 1.8s ease-in-out infinite; }
+.status-failed:hover, .status-queued:hover { transform: scale(1.25); }
+@keyframes queued-pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .status-queued { animation: none; } }
+.bubble-status .status-queued, .bubble-status .status-failed { font-size: 1.3em; opacity: 1; padding: 2px 5px; margin: -2px -5px; vertical-align: middle; }

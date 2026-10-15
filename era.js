@@ -103,7 +103,9 @@ function apply(era) {
 async function refreshAppearance() {
   if (!document.getElementById("app-shell")) return;
   try {
-    applyAppearance(await loadAppearance());
+    // Never let a slow/blocked storage read hold the switch hostage.
+    const settings = await Promise.race([loadAppearance(), new Promise((r) => setTimeout(() => r(null), 1500))]);
+    if (settings) applyAppearance(settings);
   } catch (_) {}
 }
 
@@ -126,6 +128,10 @@ function showPill(era) {
 function travel(toEra) {
   if (busy) return;
   busy = true;
+  // Watchdog: whatever happens, the button works again after a few seconds.
+  setTimeout(() => {
+    busy = false;
+  }, 4000);
 
   const swap = async () => {
     try {

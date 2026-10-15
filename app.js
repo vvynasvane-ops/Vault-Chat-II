@@ -53,7 +53,16 @@ import {
   clearConversation,
   buildConversationId,
   MAX_MEDIA_BYTES,
+  resendMessage,
+  flushOutbox,
+  recoverStuckMessages,
+  countPendingMessages,
+  setSendStatusListener,
+  watchConnection,
+  isOnline,
 } from "./messaging.js";
+import { setupOutboxBar } from "./outbox-ui.js";
+import { isPendingStatus } from "./outbox.js";
 import { idb } from "./idb.js";
 import { getTrendingGifs, searchGifs, fetchGifBlob } from "./gif-picker.js";
 import {
@@ -288,7 +297,8 @@ async function boot() {
     },
     onDeliveryAck: async (messageId) => {
       const msg = await idb.get("messages", messageId);
-      if (msg && msg.status === "SENT") {
+      if (msg && ["SENT", "QUEUED", "FAILED", "SENDING"].includes(msg.status)) {
+        // A receipt proves it arrived, even if our own send looked stuck.
         msg.status = "DELIVERED";
         await idb.put("messages", msg);
         updateStatusIcon(messageId, "DELIVERED");
@@ -305,6 +315,79 @@ async function boot() {
       }
     },
   });
+
+  startOutbox();
+}
+
+// ─── Outbox: resend messages that couldn't go out (offline etc.) ─────────
+
+const outboxBar = setupOutboxBar({
+  bar: document.getElementById("outbox-bar"),
+  icon: document.getElementById("outbox-icon"),
+  text: document.getElementById("outbox-text"),
+  sendBtn: document.getElementById("outbox-send"),
+  getPending: () => countPendingMessages(),
+  isOnline: () => isOnline(),
+  onSendNow: () => flushOutboxNow({ manual: true }),
+});
+
+// The recipient's public key for a stored message (null → leave it queued)
+function keyForMessage(m) {
+  const profile = contacts.get(m.receiverId);
+  return profile && profile.publicKeyBase64 ? profile.publicKeyBase64 : null;
+}
+
+async function flushOutboxNow({ manual = false } = {}) {
+  try {
+    const res = await flushOutbox(keyForMessage, { manual });
+    if (res.sent > 0) {
+      outboxBar.flash(`✓ ${res.sent} queued message${res.sent === 1 ? "" : "s"} sent`);
+    } else {
+      outboxBar.refresh();
+    }
+  } catch (err) {
+    console.warn("Outbox flush failed:", err);
+    outboxBar.refresh();
+  }
+}
+
+async function resendOne(messageId) {
+  const msg = await idb.get("messages", messageId).catch(() => null);
+  if (!msg) return;
+  const key = keyForMessage(msg);
+  if (!key) {
+    alert("Can't resend yet — this contact's details haven't loaded. Try again in a moment.");
+    return;
+  }
+  await resendMessage(messageId, key);
+  outboxBar.refresh();
+}
+
+// Tap the 📤 / ⚠ next to a message to send it again.
+els.messageLog.addEventListener("click", (e) => {
+  const trigger = e.target.closest && e.target.closest("[data-resend]");
+  if (!trigger) return;
+  const bubble = trigger.closest("[data-message-id]");
+  if (bubble) resendOne(bubble.dataset.messageId);
+});
+
+// Keep bubble icons + the bar in step with what the outbox is doing.
+setSendStatusListener((m) => {
+  updateStatusIcon(m.messageId, m.status);
+  outboxBar.refresh();
+});
+
+async function startOutbox() {
+  await recoverStuckMessages().catch(() => 0); // "SENDING" left over from a closed tab
+  watchConnection((online) => {
+    outboxBar.refresh();
+    if (online) flushOutboxNow();
+  });
+  // Safety net: also retry every 30s while online (covers flaky links).
+  setInterval(() => {
+    if (isOnline()) flushOutboxNow();
+  }, 30000);
+  flushOutboxNow();
 }
 
 // Section 6 (new) — unknown-sender conversations: any inbound message from
@@ -723,7 +806,8 @@ function statusIcon(status) {
     case "SENT": return "✓";
     case "DELIVERED": return "✓✓";
     case "READ": return `<span class="status-read">✓✓</span>`;
-    case "FAILED": return `<span class="status-failed">⚠</span>`;
+    case "QUEUED": return `<span class="status-queued" data-resend title="Waiting for a connection — tap to send now">📤</span>`;
+    case "FAILED": return `<span class="status-failed" data-resend title="Not sent — tap to retry">⚠</span>`;
     default: return "";
   }
 }
@@ -792,6 +876,9 @@ function attachBubbleContextMenu(bubble, msg) {
   const open = (x, y) => {
     activeMenuMessageId = msg.messageId;
     const items = [];
+    if (msg.isSentByMe && isPendingStatus(msg.status) && !msg.deletedForEveryone) {
+      items.push({ label: "Resend now", action: () => resendOne(msg.messageId) });
+    }
     if (msg.isSentByMe && msg.messageType === "TEXT" && !msg.deletedForEveryone) {
       items.push({ label: "Edit", action: () => startEdit(msg) });
     }
@@ -839,6 +926,8 @@ async function deleteForEveryone(msg) {
   refreshBubble(msg);
   refreshPinnedBar();
   const otherUid = msg.isSentByMe ? msg.receiverId : msg.senderId;
+  // Never reached them? Nothing to retract remotely (and it won't be sent now).
+  if (msg.isSentByMe && (isPendingStatus(msg.status) || msg.status === "SENDING")) return;
   await sendDeleteEveryone(otherUid, myUid, msg.messageId);
 }
 
@@ -931,11 +1020,16 @@ els.messageForm.addEventListener("submit", async (e) => {
     els.messageForm.classList.remove("editing");
     try {
       const existing = await idb.get("messages", id);
+      // Not delivered yet? Then the (re)send itself will carry the new text —
+      // no separate EDIT signal, and nothing to mark as "edited".
+      const notOutYet = isPendingStatus(existing.status) || existing.status === "SENDING";
       existing.content = text;
-      existing.edited = true;
+      existing.edited = !notOutYet;
       await idb.put("messages", existing);
       refreshBubble(existing);
-      await sendEdit(activeContactUid, myUid, profile.publicKeyBase64, id, text);
+      if (!notOutYet) {
+        await sendEdit(activeContactUid, myUid, profile.publicKeyBase64, id, text);
+      }
     } catch (err) {
       alert("Edit failed to send: " + err.message);
     }
