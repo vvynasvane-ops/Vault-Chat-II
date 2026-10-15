@@ -208,7 +208,7 @@
         <button type="button" class="era-btn" data-era-toggle>🏺 Ancient mode · 2974 BCE</button>
         <hr class="dialog-divider" />
         <label class="switch-row">
-          <span>Dark mode</span>
+          <span>Light mode</span>
           <input type="checkbox" id="theme-switch" />
         </label>
 
@@ -223,6 +223,7 @@
 
         <label class="field-label">Font color</label>
         <div id="font-color-grid" class="color-grid"></div>
+        <div id="font-mixer"></div>
 
         <button id="btn-reset-appearance" class="btn-secondary full-width">Reset text style to default</button>
 
@@ -244,18 +245,7 @@
           <button type="button" class="rgb-tab" data-target="bubbleTheirs"><i></i>Their bubbles</button>
           <button type="button" class="rgb-tab" data-target="chatTint"><i></i>Chat tint</button>
         </div>
-        <div class="rgb-mixer">
-          <div class="rgb-preview-row">
-            <div id="rgb-preview" class="rgb-preview" aria-hidden="true"></div>
-            <input id="rgb-hex" class="rgb-hex" type="text" maxlength="7" spellcheck="false" autocomplete="off" autocapitalize="none" aria-label="Hex colour" placeholder="#6ff2dc" />
-            <input id="rgb-native" class="rgb-native" type="color" value="#6ff2dc" aria-label="Pick a colour" title="Open colour wheel" />
-          </div>
-          <label class="rgb-row"><span class="rgb-chan r">R</span><input id="rgb-r" class="rgb-slider rgb-r" type="range" min="0" max="255" value="111" /><output id="rgb-r-val">111</output></label>
-          <label class="rgb-row"><span class="rgb-chan g">G</span><input id="rgb-g" class="rgb-slider rgb-g" type="range" min="0" max="255" value="242" /><output id="rgb-g-val">242</output></label>
-          <label class="rgb-row"><span class="rgb-chan b">B</span><input id="rgb-b" class="rgb-slider rgb-b" type="range" min="0" max="255" value="220" /><output id="rgb-b-val">220</output></label>
-          <div id="rgb-presets" class="color-grid" aria-label="Quick colours"></div>
-          <button id="btn-reset-accent" type="button" class="btn-secondary full-width">Reset this colour</button>
-        </div>
+        <div id="studio-mixer"></div>
 
         <label class="field-label">Bubble shape</label>
         <div id="studio-shapes" class="chip-row"></div>

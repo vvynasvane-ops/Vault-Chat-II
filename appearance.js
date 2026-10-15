@@ -101,6 +101,10 @@ export async function saveAppearance(partial) {
   cache = { ...(cache || DEFAULTS), ...partial };
   // Apply first so the UI never waits on (or breaks because of) storage.
   applyAppearance(cache);
+  // Let every open control (font pickers, studio, mixers) re-sync itself.
+  try {
+    window.dispatchEvent(new CustomEvent("appearanceSaved", { detail: { keys: Object.keys(partial) } }));
+  } catch (_) {}
   try {
     await idb.put("settings", cache, SETTINGS_KEY);
   } catch (err) {
@@ -229,6 +233,13 @@ function ensureContrast(c1, c2, textHex) {
     c2 = darkenText ? scale(c2, 0.88) : toward(c2, [255, 255, 255], 0.2);
   }
   return [c1, c2];
+}
+
+// WCAG contrast ratio between two "#rrggbb" colours (1 – 21)
+export function contrastRatio(hexA, hexB) {
+  const a = parseHex(hexA);
+  const b = parseHex(hexB);
+  return a && b ? contrast(a, b) : 0;
 }
 
 export function applyChatTheme(settings) {

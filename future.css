@@ -491,3 +491,34 @@ html[data-bubble-fx="shimmer"] .bubble.mine.flash { animation: flash-highlight 1
 .studio-chip.selected { background: var(--cyan-glow); border-color: var(--cyan); box-shadow: 0 0 12px -4px var(--cyan-glow); }
 .scrim-slider { background: linear-gradient(90deg, transparent, rgba(var(--wp-rgb), .9)) !important; border-radius: 999px !important; height: 10px; }
 .scrim-auto { flex: 0 0 auto; padding: 8px 14px; }
+
+
+/* ── Fixes: dropdown legibility, dialog frame, scrollbars ──────────── */
+
+/* Native dropdown lists were pale text on a white popup (unreadable) */
+select, .select-input { color-scheme: dark; cursor: pointer; }
+:root[data-theme="light"] select, :root[data-theme="light"] .select-input { color-scheme: light; }
+select option, select optgroup { background-color: var(--bg-void); color: var(--text-primary); }
+select option:checked, select option:hover {
+  background-color: var(--bg-panel-raised);
+  background-color: color-mix(in srgb, var(--cyan) 30%, var(--bg-void));
+  color: var(--text-primary);
+}
+
+/* The gradient frame was a ::before inside a scrolling box: it stuck out by 1px
+   (a horizontal scrollbar on Windows) and scrolled away. Use a plain glow frame. */
+.dialog::before { display: none !important; }
+.dialog {
+  overflow-x: hidden;
+  border-color: var(--border);
+  border-color: color-mix(in srgb, var(--plasma) 55%, transparent);
+  box-shadow: 0 24px 60px -20px #000, 0 0 44px -16px var(--plasma-glow);
+}
+
+/* Reusable RGB mixer extras */
+.font-sample { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; line-height: 1.4; }
+.font-ratio { font-size: 11px; letter-spacing: .04em; color: var(--text-dim); }
+.font-ratio.ok { color: var(--online); }
+.font-ratio.bad { color: var(--danger); }
+.rgb-targets { min-width: 0; }
+.rgb-tab { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

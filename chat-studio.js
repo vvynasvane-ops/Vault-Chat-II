@@ -1,7 +1,8 @@
-// chat-studio.js — the "Chat studio" section of the Appearance panel:
-// theme presets, an RGB mixer that can target the accent / your bubbles /
-// their bubbles / the chat tint, bubble shape + effect, wallpaper dimming,
-// and a live preview that proves messages stay readable on any background.
+// chat-studio.js — the "Chat studio" and "Font colour" sections of the
+// Appearance panel: theme presets, a reusable RGB mixer (used for the accent,
+// your bubbles, their bubbles, the chat tint AND the font colour), bubble
+// shape + effect, wallpaper dimming, and a live preview that proves messages
+// stay readable on any background.
 //
 // Everything is applied live through appearance.js (CSS variables on <html>)
 // and saved with a short debounce, so dragging a slider never hammers storage.
@@ -12,12 +13,14 @@ import {
   applyAppearance,
   parseHex,
   rgbToHex,
+  contrastRatio,
   CHAT_PRESETS,
   BUBBLE_SHAPES,
   BUBBLE_FX,
 } from "./appearance.js";
 
 const QUICK_COLORS = ["#6ff2dc", "#00e5ff", "#a78bff", "#ff5c8a", "#ffd48a", "#7dff6b", "#ff8a3d", "#4d7cff"];
+const FONT_QUICK = ["#ffffff", "#f4fbff", "#ffe9a8", "#ffc266", "#ff8fa8", "#b58bff", "#22ffb0", "#7dd3fc", "#9db2c4", "#111111"];
 const FALLBACKS = { accent: "#6ff2dc", bubbleMine: "#0a7f9c", bubbleTheirs: "#18133a", chatTint: "#3a2a8f" };
 const TARGET_KEYS = Object.keys(FALLBACKS);
 
@@ -27,18 +30,118 @@ const $ = (id) => document.getElementById(id);
 function cssToHex(value) {
   const v = String(value || "").trim();
   if (parseHex(v)) return rgbToHex(...parseHex(v));
-  const m = /rgba?\(\s*(\d+)[ ,]+(\d+)[ ,]+(\d+)/i.exec(v);
-  return m ? rgbToHex(+m[1], +m[2], +m[3]) : "";
+  const m = /rgba?\(\s*(\d+)[ ,]+(\d+)[ ,]+(\d+)(?:[ ,/]+([\d.]+))?/i.exec(v);
+  if (!m) return "";
+  if (m[4] !== undefined && Number(m[4]) === 0) return ""; // fully transparent
+  return rgbToHex(+m[1], +m[2], +m[3]);
+}
+
+// ─── Reusable RGB mixer ──────────────────────────────────────────────────
+// Builds its own markup inside `host`; fires onInput(hex) for every change
+// from the user and never when you call paint() (so it can't feed back).
+
+function createMixer(host, { quick = QUICK_COLORS, resetLabel = "Reset", sample = false, onInput, onReset }) {
+  host.textContent = "";
+  const root = document.createElement("div");
+  root.className = "rgb-mixer";
+  root.innerHTML = `
+    <div class="rgb-preview-row">
+      <div class="rgb-preview" aria-hidden="true"></div>
+      <input class="rgb-hex" type="text" maxlength="7" spellcheck="false" autocomplete="off" autocapitalize="none" aria-label="Hex colour" placeholder="#6ff2dc" />
+      <input class="rgb-native" type="color" value="#6ff2dc" aria-label="Pick a colour" title="Open colour wheel" />
+    </div>
+    <label class="rgb-row"><span class="rgb-chan r">R</span><input class="rgb-slider rgb-r" type="range" min="0" max="255" value="0" aria-label="Red" /><output>0</output></label>
+    <label class="rgb-row"><span class="rgb-chan g">G</span><input class="rgb-slider rgb-g" type="range" min="0" max="255" value="0" aria-label="Green" /><output>0</output></label>
+    <label class="rgb-row"><span class="rgb-chan b">B</span><input class="rgb-slider rgb-b" type="range" min="0" max="255" value="0" aria-label="Blue" /><output>0</output></label>
+    ${sample ? '<div class="font-sample">The quick brown fox jumps over the lazy dog · 0123456789</div><div class="font-ratio"></div>' : ""}
+    <div class="color-grid mixer-quick" aria-label="Quick colours"></div>
+    <button type="button" class="btn-secondary full-width mixer-reset"></button>`;
+  host.appendChild(root);
+
+  const q = (sel) => root.querySelector(sel);
+  const sl = { r: q(".rgb-r"), g: q(".rgb-g"), b: q(".rgb-b") };
+  const out = { r: sl.r.nextElementSibling, g: sl.g.nextElementSibling, b: sl.b.nextElementSibling };
+  const chip = q(".rgb-preview");
+  const hexInput = q(".rgb-hex");
+  const nativeInput = q(".rgb-native");
+  const sampleEl = q(".font-sample");
+  const ratioEl = q(".font-ratio");
+  q(".mixer-reset").textContent = resetLabel;
+
+  let lastUserInput = 0;
+
+  function paint(hex, { fromHexField = false } = {}) {
+    const rgb = parseHex(hex);
+    if (!rgb) return null;
+    const clean = rgbToHex(...rgb);
+    ["r", "g", "b"].forEach((k, i) => {
+      sl[k].value = rgb[i];
+      out[k].textContent = rgb[i];
+    });
+    chip.style.background = clean;
+    nativeInput.value = clean;
+    if (!fromHexField) hexInput.value = clean;
+    // Slider tracks must beat the global `input { background … !important }`
+    const track = (el, a, b) => el.style.setProperty("background", `linear-gradient(90deg, ${a}, ${b})`, "important");
+    track(sl.r, `rgb(0,${rgb[1]},${rgb[2]})`, `rgb(255,${rgb[1]},${rgb[2]})`);
+    track(sl.g, `rgb(${rgb[0]},0,${rgb[2]})`, `rgb(${rgb[0]},255,${rgb[2]})`);
+    track(sl.b, `rgb(${rgb[0]},${rgb[1]},0)`, `rgb(${rgb[0]},${rgb[1]},255)`);
+    if (sampleEl) paintSample(clean);
+    return clean;
+  }
+
+  // Font colour: show real text on the real page background + a contrast score
+  function paintSample(hex) {
+    const bg = cssToHex(getComputedStyle(document.body).backgroundColor) || "#05040d";
+    sampleEl.style.background = bg;
+    sampleEl.style.color = hex;
+    const ratio = contrastRatio(hex, bg);
+    const label = ratio >= 7 ? "Excellent" : ratio >= 4.5 ? "Good" : ratio >= 3 ? "Low — may strain your eyes" : "Hard to read";
+    ratioEl.textContent = `Readability ${ratio.toFixed(1)}:1 · ${label}`;
+    ratioEl.classList.toggle("ok", ratio >= 4.5);
+    ratioEl.classList.toggle("bad", ratio < 3);
+  }
+
+  const user = (hex, opts) => {
+    const clean = paint(hex, opts);
+    if (!clean) return;
+    lastUserInput = Date.now();
+    onInput?.(clean);
+  };
+
+  quick.forEach((hex) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "color-swatch";
+    b.title = hex;
+    b.style.background = hex;
+    b.addEventListener("click", () => user(hex));
+    q(".mixer-quick").appendChild(b);
+  });
+
+  ["r", "g", "b"].forEach((k) => sl[k].addEventListener("input", () => user(rgbToHex(sl.r.value, sl.g.value, sl.b.value))));
+  hexInput.addEventListener("input", () => {
+    const v = hexInput.value.trim();
+    const full = v.startsWith("#") ? v : `#${v}`;
+    if (parseHex(full)) user(full, { fromHexField: true });
+  });
+  hexInput.addEventListener("blur", () => {
+    hexInput.value = rgbToHex(sl.r.value, sl.g.value, sl.b.value);
+  });
+  nativeInput.addEventListener("input", () => user(nativeInput.value));
+  q(".mixer-reset").addEventListener("click", () => onReset?.());
+
+  return {
+    el: root,
+    paint,
+    // true while the person is actively dragging/typing (don't fight them)
+    busy: () => Date.now() - lastUserInput < 700,
+  };
 }
 
 export async function setupChatStudio() {
-  const sl = { r: $("rgb-r"), g: $("rgb-g"), b: $("rgb-b") };
-  const out = { r: $("rgb-r-val"), g: $("rgb-g-val"), b: $("rgb-b-val") };
-  const preview = $("rgb-preview");
-  const hexInput = $("rgb-hex");
-  const nativeInput = $("rgb-native");
-  const quickBox = $("rgb-presets");
-  const resetBtn = $("btn-reset-accent");
+  const studioHost = $("studio-mixer");
+  const fontHost = $("font-mixer");
   const presetBox = $("studio-presets");
   const shapeBox = $("studio-shapes");
   const fxBox = $("studio-fx");
@@ -48,43 +151,80 @@ export async function setupChatStudio() {
   const resetStudio = $("btn-reset-studio");
   const chatPreview = $("chat-preview");
   const tabs = Array.from(document.querySelectorAll(".rgb-tab"));
-  if (!sl.r || !sl.g || !sl.b || !preview || !hexInput || !nativeInput || !quickBox || !presetBox || !tabs.length) return;
+  if (!studioHost || !presetBox || !shapeBox || !fxBox || !scrimSlider || !scrimVal || !scrimAuto || !resetStudio || !tabs.length) return;
 
   let cur = await loadAppearance();
   let target = "accent";
   const timers = {};
 
-  // ── value helpers ──
   const defaultFor = (key) => {
     if (key === "accent") return cssToHex(getComputedStyle(document.documentElement).getPropertyValue("--cyan")) || FALLBACKS.accent;
     return FALLBACKS[key];
   };
   const valueOf = (key) => (parseHex(cur[key]) ? rgbToHex(...parseHex(cur[key])) : defaultFor(key));
+  const defaultFont = () => cssToHex(getComputedStyle(document.body).color) || "#e6e2ff";
+  const fontValue = () => (parseHex(cur.fontColor) ? rgbToHex(...parseHex(cur.fontColor)) : defaultFont());
 
-  function paint(hex, { fromHexField = false } = {}) {
-    const rgb = parseHex(hex);
-    if (!rgb) return null;
-    const clean = rgbToHex(...rgb);
-    ["r", "g", "b"].forEach((k, i) => {
-      sl[k].value = rgb[i];
-      if (out[k]) out[k].textContent = rgb[i];
+  // Persist (debounced per field). Values are captured now so switching
+  // tabs mid-drag can never write a colour into the wrong field.
+  function scheduleSave(partial, delay = 250) {
+    const k = Object.keys(partial).join(",");
+    clearTimeout(timers[k]);
+    timers[k] = setTimeout(async () => {
+      try {
+        cur = await saveAppearance(partial);
+      } catch (e) {
+        console.warn("save failed", e);
+      }
+      paintTabDots();
+      markPresets();
+    }, delay);
+  }
+
+  // ── studio mixer (accent / bubbles / tint) ──
+  const studio = createMixer(studioHost, {
+    quick: QUICK_COLORS,
+    resetLabel: "Reset this colour",
+    onInput(hex) {
+      const key = target;
+      applyAppearance({ ...cur, [key]: hex, chatPreset: "" }); // instant preview everywhere
+      scheduleSave({ [key]: hex, chatPreset: "" });
+      const dot = tabs.find((t) => t.dataset.target === key)?.querySelector("i");
+      if (dot) dot.style.setProperty("--dot", hex);
+    },
+    async onReset() {
+      clearTimeout(timers[`${target},chatPreset`]);
+      cur = await saveAppearance({ [target]: "", chatPreset: "" });
+      studio.paint(defaultFor(target));
+      paintTabDots();
+      markPresets();
+    },
+  });
+
+  // ── font colour mixer ──
+  let font = null;
+  if (fontHost) {
+    font = createMixer(fontHost, {
+      quick: FONT_QUICK,
+      resetLabel: "Reset font colour",
+      sample: true,
+      onInput(hex) {
+        applyAppearance({ ...cur, fontColor: hex });
+        scheduleSave({ fontColor: hex });
+      },
+      async onReset() {
+        clearTimeout(timers.fontColor);
+        cur = await saveAppearance({ fontColor: "" });
+        font.paint(defaultFont());
+      },
     });
-    preview.style.background = clean;
-    nativeInput.value = clean;
-    if (!fromHexField) hexInput.value = clean;
-    // Slider tracks must beat the global `input { background … !important }`
-    const track = (el, a, b) => el.style.setProperty("background", `linear-gradient(90deg, ${a}, ${b})`, "important");
-    track(sl.r, `rgb(0,${rgb[1]},${rgb[2]})`, `rgb(255,${rgb[1]},${rgb[2]})`);
-    track(sl.g, `rgb(${rgb[0]},0,${rgb[2]})`, `rgb(${rgb[0]},255,${rgb[2]})`);
-    track(sl.b, `rgb(${rgb[0]},${rgb[1]},0)`, `rgb(${rgb[0]},${rgb[1]},255)`);
-    return clean;
+    font.paint(fontValue());
   }
 
   function paintTabDots() {
     tabs.forEach((t) => {
-      const key = t.dataset.target;
       const dot = t.querySelector("i");
-      if (dot) dot.style.setProperty("--dot", valueOf(key));
+      if (dot) dot.style.setProperty("--dot", valueOf(t.dataset.target));
     });
   }
 
@@ -104,32 +244,6 @@ export async function setupChatStudio() {
     scrimAuto.classList.toggle("selected", !manual);
   }
 
-  // Persist (debounced per field). Values are captured now so switching
-  // tabs mid-drag can never write a colour into the wrong field.
-  function scheduleSave(partial, delay = 250) {
-    const k = Object.keys(partial).join(",");
-    clearTimeout(timers[k]);
-    timers[k] = setTimeout(async () => {
-      try {
-        cur = await saveAppearance(partial);
-      } catch (e) {
-        console.warn("save failed", e);
-      }
-      paintTabDots();
-      markPresets();
-    }, delay);
-  }
-
-  function live(hex, opts) {
-    const clean = paint(hex, opts);
-    if (!clean) return;
-    const key = target;
-    applyAppearance({ ...cur, [key]: clean, chatPreset: "" }); // instant preview everywhere
-    scheduleSave({ [key]: clean, chatPreset: "" });
-    const dot = tabs.find((t) => t.dataset.target === key)?.querySelector("i");
-    if (dot) dot.style.setProperty("--dot", clean);
-  }
-
   function selectTarget(key) {
     if (!TARGET_KEYS.includes(key)) return;
     target = key;
@@ -138,20 +252,10 @@ export async function setupChatStudio() {
       t.classList.toggle("active", on);
       t.setAttribute("aria-selected", on ? "true" : "false");
     });
-    paint(valueOf(key));
+    studio.paint(valueOf(key));
   }
 
-  // ── build static UI ──
-  QUICK_COLORS.forEach((hex) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "color-swatch";
-    b.title = hex;
-    b.style.background = hex;
-    b.addEventListener("click", () => live(hex));
-    quickBox.appendChild(b);
-  });
-
+  // ── presets, shapes, effects ──
   CHAT_PRESETS.forEach((p) => {
     const b = document.createElement("button");
     b.type = "button";
@@ -196,29 +300,7 @@ export async function setupChatStudio() {
   chips(shapeBox, BUBBLE_SHAPES, "bubbleShape");
   chips(fxBox, BUBBLE_FX, "bubbleFx");
 
-  // ── events ──
   tabs.forEach((t) => t.addEventListener("click", () => selectTarget(t.dataset.target)));
-
-  const onSlider = () => live(rgbToHex(sl.r.value, sl.g.value, sl.b.value));
-  ["r", "g", "b"].forEach((k) => sl[k].addEventListener("input", onSlider));
-
-  hexInput.addEventListener("input", () => {
-    const v = hexInput.value.trim();
-    const full = v.startsWith("#") ? v : `#${v}`;
-    if (parseHex(full)) live(full, { fromHexField: true });
-  });
-  hexInput.addEventListener("blur", () => {
-    hexInput.value = rgbToHex(sl.r.value, sl.g.value, sl.b.value);
-  });
-  nativeInput.addEventListener("input", () => live(nativeInput.value));
-
-  resetBtn.addEventListener("click", async () => {
-    clearTimeout(timers[`${target},chatPreset`]);
-    cur = await saveAppearance({ [target]: "", chatPreset: "" });
-    paint(defaultFor(target));
-    paintTabDots();
-    markPresets();
-  });
 
   scrimSlider.addEventListener("input", () => {
     const n = Number(scrimSlider.value);
@@ -249,10 +331,25 @@ export async function setupChatStudio() {
     });
   }
 
-  // Keep the panel in sync when the era or theme flips underneath it
+  // Something else saved (font swatches, theme switch, a preset…) → re-sync
+  // our controls, unless the person is mid-drag on them.
+  window.addEventListener("appearanceSaved", async () => {
+    try {
+      cur = await loadAppearance();
+    } catch (_) {
+      return;
+    }
+    if (!studio.busy()) studio.paint(valueOf(target));
+    if (font && !font.busy()) font.paint(fontValue());
+    paintTabDots();
+    markPresets();
+  });
+
+  // Era / theme flips change the defaults and the sample's page background
   window.addEventListener("eraChanged", () => {
     paintTabDots();
-    selectTarget(target);
+    if (!studio.busy()) studio.paint(valueOf(target));
+    if (font && !font.busy()) font.paint(fontValue());
   });
 
   selectTarget("accent");

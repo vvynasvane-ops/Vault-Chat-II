@@ -1439,6 +1439,8 @@ function setupAppearancePanel() {
     });
   }
   reflect();
+  // Other controls (the RGB font picker, Chat Studio) save through the same store.
+  window.addEventListener("appearanceSaved", () => reflect().catch(() => {}));
 }
 
 // ─── Account settings: username + password (Section 13) ────────────────
